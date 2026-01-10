@@ -1,4 +1,7 @@
 import unittest
+import enum
+
+########### PARSER ##############
 
 class Parser:
     def __init__(self, source: str):
@@ -43,20 +46,56 @@ class ParseTests(unittest.TestCase):
     def test_parse_fixnum_with_whitespace(self):
         self.assertEqual(self._parse("     42"), 42)
 
+########### COMPILER ##############
+
+class SI:
+    def __init__(self, mask, tag, shift):
+        self.mask = mask
+        self.tag = tag
+        self.shift = shift
+SHIFT_INFO = {
+    "fixnum": SI(mask=3, tag=0, shift=2)
+}
+SYSTEM_TYPE = 64
+
+def tag_ptr(value, type):
+    si = SHIFT_INFO[type]
+    if value >= 2 ** (SYSTEM_TYPE - si.shift):
+        raise ValueError(f"{type} value {value} too large to store")
+    
+    # Shift and tag
+    value = value << si.shift
+    value |= si.tag
+
+    return value
+
+def box_fixnum(val):
+    return tag_ptr(val, "fixnum")
+
 class Compiler:
     def __init__(self):
         self.code = []
 
     def compile(self, expr):
-        raise NotImplementedError("compile")
+        emit = self.code.append
+        match expr:
+            case int(_):
+                emit(I.LOAD64)
+                emit(box_fixnum(expr))
+    
+    def compile_function(self, expr):
+        self.compile(expr)
+        self.code.append(I.RETURN)
 
     def write_to_stream(self, f):
-        raise NotImplementedError("write_to_stream")
+        print(self.code)
+        for op in self.code:
+            f.write(op.to_bytes(8, "little"))
 
-import enum
 class I(enum.IntEnum):
     # Where all of our opcodes will go
-    pass
+    LOAD64 = enum.auto()
+    RETURN = enum.auto()
 
 import sys
 def compile_program():
@@ -64,7 +103,7 @@ def compile_program():
     program = scheme_parse(source)
     compiler = Compiler()
     compiler.compile_function(program)
-    compiler.write_to_stream(sys.stdout)
+    compiler.write_to_stream(sys.stdout.buffer)
 
 if __name__ == "__main__":
     compile_program()
