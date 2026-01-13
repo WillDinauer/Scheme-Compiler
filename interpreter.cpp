@@ -48,7 +48,7 @@ public:
 };
 
 // Read a qword from the code
-uint64_t read_word(int& pc, std::vector<uint8_t>& code) {
+uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
     int word_bytes = 8;
     uint64_t ret = 0;
 
@@ -71,12 +71,16 @@ enum VT {
 
 // Figure out the type based on the tag information
 VT resolve_type(uint64_t value) {
+    #ifdef DEBUG_ACTIVE
+        std::cout << "resolving value: " << value << std::endl;
+    #endif
+
     return VT::FIXNUM;
 }
 
 // Run the code
 std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
-    int pc = 0;
+    size_t pc = 0;
     v_stack stk;
     while (pc < code.size()) {
         // truncate instr to lowest byte
@@ -107,7 +111,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             }
             default:
             {
-               throw std::runtime_error(std::format("Tried to operate on unknown instruction {}", instr));
+               throw std::runtime_error(std::format("Tried to operate on unknown instruction (opcode {})", instr));
             }
         }
     }
