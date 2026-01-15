@@ -8,6 +8,8 @@ SYSTEM_TYPE = 64
 class I(enum.IntEnum):
     LOAD64 = enum.auto()
     RETURN = enum.auto()
+
+    # Unary functions
     ADD1 = enum.auto()
     SUB1 = enum.auto()
     INT_TO_CHAR = enum.auto()
@@ -17,6 +19,13 @@ class I(enum.IntEnum):
     INT_CHECK = enum.auto()
     BOOL_CHECK = enum.auto()
     NOT = enum.auto()
+    
+    # Binary functions
+    ADD = enum.auto()
+    SUB = enum.auto()
+    MUL = enum.auto()
+    LT = enum.auto()
+    EQL = enum.auto()
 
 # Container for shift/tagging information
 class SI:
@@ -89,33 +98,51 @@ class Compiler:
                         self.compile(expr[1])
                         emit(I.ADD1)
                     case "sub1":
-                        pass
+                        self.compile(expr[1])
+                        emit(I.SUB1)
                     case "integer->char":
-                        pass
+                        self.compile(expr[1])
+                        emit(I.INT_TO_CHAR)
                     case "char->integer":
-                        pass
+                        self.compile(expr[1])
+                        emit(I.CHAR_TO_INT)
                     case "null?":
-                        pass
+                        self.compile(expr[1])
+                        emit(I.NULL_CHECK)
                     case "zero?":
-                        pass
+                        self.compile(expr[1])
+                        emit(I.ZERO_CHECK)
                     case "not":
-                        pass
+                        self.compile(expr[1])
+                        emit(I.NOT)
                     case "integer?":
-                        pass
+                        self.compile(expr[1])
+                        emit(I.INT_CHECK)
                     case "boolean?":
-                        pass
+                        self.compile(expr[1])
+                        emit(I.BOOL_CHECK)
 
                     # Binary functions
                     case "+":
-                        pass
+                        self.compile(expr[1])
+                        self.compile(expr[2])
+                        emit(I.ADD)
                     case "-":
-                        pass
+                        self.compile(expr[1])
+                        self.compile(expr[2])
+                        emit(I.SUB)
                     case "*":
-                        pass
+                        self.compile(expr[1])
+                        self.compile(expr[2])
+                        emit(I.MUL)
                     case "<":
-                        pass
+                        self.compile(expr[1])
+                        self.compile(expr[2])
+                        emit(I.LT)
                     case "=":
-                        pass
+                        self.compile(expr[1])
+                        self.compile(expr[2])
+                        emit(I.EQL)
 
             case str():
                 pass

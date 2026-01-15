@@ -8,7 +8,7 @@
 #include <iomanip>
 
 // debug flag
-#define DEBUG_ACTIVE
+// #define DEBUG_ACTIVE
 
 // Pointer resolution information
 #define FIXNUM_MASK     3
@@ -43,6 +43,8 @@ void print_64b(std::string name, uint64_t value) {
 enum opcode_t : uint8_t {
     LOAD64 = 0x01,
     RETURN = 0x02,
+
+    // Unary functions
     ADD1 = 0x03,
     SUB1 = 0x04,
     INT_TO_CHAR = 0x05,
@@ -52,6 +54,13 @@ enum opcode_t : uint8_t {
     INT_CHECK = 0x09,
     BOOL_CHECK = 0x0A,
     NOT = 0x0B,
+
+    // Binary functions
+    ADD = 0x0C,
+    SUB = 0x0D,
+    MUL = 0x0E,
+    LT = 0x0F,
+    EQL = 0x10
 };
 
 // 8-byte stack values
@@ -138,7 +147,7 @@ std::string cpp_bool_to_scheme_bool(bool value) {
 }
 
 // Run the code
-std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
+uint64_t interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
     v_stack stk;
     while (pc < code.size()) {
@@ -240,11 +249,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 #endif
 
                 uint64_t value = stk.pop();
-                VT ty = resolve_type(value);
-                if (ty == VT::FIXNUM) {
-                    return std::make_unique<uint64_t>(value);
-                }
-                return nullptr;
+                return value;
             }
             default:
             {
@@ -272,26 +277,24 @@ std::vector<uint8_t> read_code() {
 
 int main() {
     std::vector<uint8_t> code = read_code();
-    std::unique_ptr<uint64_t> result = interpret(code);
-    if (result) {
-        uint64_t val = * result;
-        VT type = resolve_type(val);
-        switch(type) {
-            case VT::FIXNUM:
-            {
-                std::cout << (val >> FIXNUM_SHIFT) << std::endl;
-                break;
-            }
-            case VT::BOOL:
-            {
-                bool truth_val = resolve_bool(val);
-                std::cout << truth_val << std::endl;
-                break;
-            }
-            default:
-            {
-                throw std::runtime_error(std::format("Unknown type returned! Raw value: {}", val));
-            }
+    uint64_t result = interpret(code);
+    VT type = resolve_type(result);
+    switch(type) {
+        case VT::FIXNUM:
+        {
+            std::cout << (result >> FIXNUM_SHIFT) << std::endl;
+            break;
+        }
+        case VT::BOOL:
+        {
+            bool truth_val = resolve_bool(result);
+            std::cout << cpp_bool_to_scheme_bool(truth_val) << std::endl;
+            break;
+        }
+        default:
+        {
+            throw std::runtime_error(std::format("Unknown type returned! Raw value: {}", result));
         }
     }
+    return 0;
 }
