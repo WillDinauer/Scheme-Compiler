@@ -16,8 +16,14 @@ class Parser:
                 raise EOFError("Unexpected end of input")
             case c if c.isdigit():
                 return self.parse_number()
+            case '#':
+                return self.parse_special()
+            case '(':
+                pass
+            case ')':
+                pass
             case c:
-                raise NotImplementedError(f"Parser only supports numbers currently. Found {c}")
+                raise NotImplementedError(f"Parser found something (currently) unsupported: {c}")
             
     def skip_whitespace(self):
         self.source = self.source.strip()
@@ -28,9 +34,39 @@ class Parser:
 
     def parse_number(self):
         start = self.pos
-        while self.pos < self.length and self.source[self.pos].isdigit():
+        while self.pos < self.length and self.peek().isdigit():
             self.pos += 1
         return int(self.source[start:self.pos])
+    
+    def parse_special(self):
+        self.pos += 1
+        match self.peek():
+            case '':
+                raise EOFError("Unexpected end of input")
+            case '\\':
+                return self.parse_char()
+            case 't':
+                return True
+            case 'f':
+                return False
+    
+    def parse_char(self):
+        self.pos += 1
+        val: str = self.parse_string()
+
+        # Typical Characters
+        if len(val) == 1 and val.isalpha():
+            return val
+        
+        # Special characters
+        raise NotImplementedError(f"Special characters not currently supported. Found {val}")
+
+    def parse_string(self) -> str:
+        start = self.pos
+        while self.pos < self.length and self.peek().isalpha():
+            self.pos += 1
+        return self.source[start:self.pos]
+        
     
 
 def scheme_parse(source: str) -> object:
