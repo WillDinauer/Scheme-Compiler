@@ -1,20 +1,27 @@
 import enum
-from parser import scheme_parse
 
+# We are assuming 64-bit
+SYSTEM_TYPE = 64
+
+# Opcodes
+class I(enum.IntEnum):
+    LOAD64 = enum.auto()
+    RETURN = enum.auto()
+
+# Container for shift/tagging information
 class SI:
     def __init__(self, mask, tag, shift):
         self.mask = mask
         self.tag = tag
         self.shift = shift
 
+# Mask/shift/tagging information for various types
 SHIFT_INFO = {
     "fixnum": SI(mask=(1<<2)-1, tag=0, shift=2),
     "char": SI(mask=(1<<9)-1, tag=(1<<5)-1, shift=8),
     "bool": SI(mask=(1<<8)-1, tag=(1<<6)-1, shift=7),
     "empty_list": SI(mask=(1<<9)-1, tag=47, shift=0)    # EL value is the tag...?
 }
-
-SYSTEM_TYPE = 64
 
 def tag_ptr(value, type):
     si = SHIFT_INFO[type]
@@ -71,19 +78,3 @@ class Compiler:
         print(self.code)
         for op in self.code:
             f.write(op.to_bytes(8, "little"))
-
-class I(enum.IntEnum):
-    # Where all of our opcodes will go
-    LOAD64 = enum.auto()
-    RETURN = enum.auto()
-
-import sys
-def compile_program():
-    source = sys.stdin.read()
-    program = scheme_parse(source)
-    compiler = Compiler()
-    compiler.compile_function(program)
-    compiler.write_to_stream(sys.stdout.buffer)
-
-if __name__ == "__main__":
-    compile_program()
