@@ -53,9 +53,14 @@ class SI:
         self.mask = mask
         self.tag = tag
         self.shift = shift
+
 SHIFT_INFO = {
-    "fixnum": SI(mask=3, tag=0, shift=2)
+    "fixnum": SI(mask=(1<<2)-1, tag=0, shift=2),
+    "char": SI(mask=(1<<9)-1, tag=(1<<5)-1, shift=8),
+    "bool": SI(mask=(1<<8)-1, tag=(1<<6)-1, shift=7),
+    "empty_list": SI(mask=(1<<9)-1, tag=47, shift=0)    # EL value is the tag...?
 }
+
 SYSTEM_TYPE = 64
 
 def tag_ptr(value, type):
@@ -71,6 +76,15 @@ def tag_ptr(value, type):
 
 def box_fixnum(val):
     return tag_ptr(val, "fixnum")
+
+def box_char(val):
+    return tag_ptr(val, "char")
+
+def box_bool(val):
+    return tag_ptr(val, "bool")
+
+def create_empty_list():
+    return tag_ptr(0, "empty_list")
 
 class Compiler:
     def __init__(self):

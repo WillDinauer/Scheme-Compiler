@@ -10,4 +10,3 @@ $(TARGET): $(SRC)
 
 clean:
 	rm -f $(TARGET)
-	rm -rf $(TARGET).dSYM

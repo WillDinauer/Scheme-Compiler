@@ -10,6 +10,19 @@
 // debug flag
 #define DEBUG_ACTIVE
 
+// Pointer resolution information
+#define FIXNUM_MASK     3
+#define FIXNUM_TAG      0
+#define FIXNUM_SHIFT    2
+#define CHAR_MASK       255
+#define CHAR_TAG        15
+#define CHAR_SHIFT      8
+#define BOOL_MASK       127
+#define BOOL_TAG        31
+#define EL_MASK         255
+#define EL_TAG          47
+#define EL_SHIFT        0
+
 // From https://stackoverflow.com/questions/6966425/converting-an-uint64-into-a-fullhex-string-c
 // Print a formatted 64-bit value
 void print_64b(std::string name, uint64_t value) {
@@ -75,7 +88,16 @@ VT resolve_type(uint64_t value) {
         std::cout << "resolving value: " << value << std::endl;
     #endif
 
-    return VT::FIXNUM;
+    if ((value & FIXNUM_MASK) == FIXNUM_TAG) {
+        return VT::FIXNUM;
+    }
+    if ((value & CHAR_MASK) == CHAR_TAG) {
+        return VT::CHAR;
+    }
+    if ((value & BOOL_MASK) == BOOL_TAG) {
+        return VT::BOOL;
+    }
+    throw std::runtime_error(std::format("Unable to resolve type for value: {}", value));
 }
 
 // Run the code
