@@ -77,13 +77,14 @@ def tag_ptr(value, type):
 def box_fixnum(val):
     return tag_ptr(val, "fixnum")
 
-def box_char(val):
+def box_char(c):
+    val = ord(c)    # Get ASCII value of character
     return tag_ptr(val, "char")
 
 def box_bool(val):
     return tag_ptr(val, "bool")
 
-def create_empty_list():
+def box_empty_list():
     return tag_ptr(0, "empty_list")
 
 class Compiler:
@@ -93,9 +94,21 @@ class Compiler:
     def compile(self, expr):
         emit = self.code.append
         match expr:
-            case int(_):
+            case int():                 # Int
                 emit(I.LOAD64)
                 emit(box_fixnum(expr))
+            case str():
+                emit(I.LOAD64)
+                if expr == "#t":        # Bool: T
+                    emit(box_bool(0))
+                elif expr == "#f":      # Bool: F
+                    emit(box_bool(1))
+                elif len(expr) == 1:    # Char
+                    emit(box_char(expr))
+            case list():
+                if len(expr) == 0:      # Empty list
+                    emit(I.LOAD64)
+                    emit(box_empty_list())
     
     def compile_function(self, expr):
         self.compile(expr)
