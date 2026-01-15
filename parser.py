@@ -25,6 +25,7 @@ class Parser:
             case '(':
                 return self.parse_list()
             case ')':
+                self.pos += 1
                 return None
             case c if c.isascii():
                 return self.parse_string()
@@ -110,8 +111,11 @@ class ParseTests(unittest.TestCase):
     def test_parse_expr(self):
         self.assertEqual(self._parse("(add1 2)"), ["add1", 2])
 
-    def test_parse_nested_list(self):
+    def test_parse__nested_list(self):
         self.assertEqual(self._parse("(+ 2 (+ 3 4))"), ["+", 2, ["+", 3, 4]])
+
+    def test_parse_multiple_nested_list(self):
+        self.assertEqual(self._parse("(= (+ 1 2) (- 4 1))"), ["=", ["+", 1, 2], ["-", 4, 1]])
 
 if __name__ == "__main__":
     unittest.main()

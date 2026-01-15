@@ -27,6 +27,16 @@
 #define TRUE_BOOL       (0 | BOOL_TAG)
 #define FALSE_BOOL      ((1 << BOOL_SHIFT) | BOOL_TAG)
 
+// Value Type
+enum VT {
+    FIXNUM,
+    BOOL,
+    CHAR,
+    EMPTY_LIST,
+    UNKNOWN
+};
+
+
 // From https://stackoverflow.com/questions/6966425/converting-an-uint64-into-a-fullhex-string-c
 // Print a formatted 64-bit value
 void print_64b(std::string name, uint64_t value) {
@@ -63,25 +73,6 @@ enum opcode_t : uint8_t {
     EQL = 0x10
 };
 
-// 8-byte stack values
-class v_stack {
-private:
-    std::vector<uint64_t> s;
-public:
-    void push(uint64_t value) {
-        s.push_back(value);
-    }
-
-    uint64_t pop() {
-        if (s.size() <= 0) {
-            return 0;
-        }
-        int value = s.back();
-        s.pop_back();
-        return value;
-    }
-};
-
 // Read a qword from the code
 uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
     int word_bytes = 8;
@@ -97,14 +88,9 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
     return ret;
 }
 
-// Value Type
-enum VT {
-    FIXNUM,
-    BOOL,
-    CHAR,
-    EMPTY_LIST,
-    UNKNOWN
-};
+uint64_t create_fixnum_ptr(uint64_t num) {
+    return (num << FIXNUM_SHIFT) | FIXNUM_TAG;
+}
 
 // Figure out the type based on the tag information
 VT resolve_type(uint64_t value) {
@@ -135,6 +121,40 @@ void type_check_or_fail(uint64_t value, VT desired_type) {
     }
 }
 
+// Zero out tag for a given pointer
+void strip_tag(uint64_t& value) {
+    uint64_t shift;
+    switch (resolve_type(value)) {
+        case VT::FIXNUM:
+        {
+            shift = FIXNUM_SHIFT;
+            break;
+        }
+        case VT::BOOL:
+        {
+            shift = BOOL_SHIFT;
+            break;
+        }
+        case VT::CHAR:
+        {
+            shift = CHAR_SHIFT;
+            break;
+        }
+        default:
+        {
+            throw std::runtime_error("trying to strip unstrippable obj");
+        }
+    }
+    // Zero out tag bits by shifting
+    value = (value >> shift) << shift;
+}
+
+// Get the value by shifting right the appropriate amount
+uint64_t get_fixnum_value(uint64_t value) {
+    type_check_or_fail(value, VT::FIXNUM);
+    return value >> FIXNUM_SHIFT;
+}
+
 // Convert uint64_t representation of boolean to c++ true/false
 bool resolve_bool(uint64_t value) {
     type_check_or_fail(value, VT::BOOL);
@@ -145,6 +165,40 @@ bool resolve_bool(uint64_t value) {
 std::string cpp_bool_to_scheme_bool(bool value) {
     return value ? "#t" : "#f";
 }
+
+
+// 8-byte stack values
+class v_stack {
+private:
+    std::vector<uint64_t> s;
+public:
+    void push(uint64_t value) {
+        s.push_back(value);
+    }
+
+    uint64_t pop() {
+        if (s.size() <= 0) {
+            return 0;
+        }
+        int value = s.back();
+        s.pop_back();
+        return value;
+    }
+
+    uint64_t pop_and_check_type(VT type) {
+        uint64_t value = pop();
+        type_check_or_fail(value, type);
+        return value;
+    }
+
+    void print_state() {
+        std::cout << "[ ";
+        for (uint64_t v: s) {
+            std::cout << v << " ";
+        }
+        std::cout << "]" << std::endl;
+    }
+};
 
 // Run the code
 uint64_t interpret(std::vector<uint8_t>& code) {
@@ -166,17 +220,15 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::ADD1:
             {
-                uint64_t value = stk.pop();
-                type_check_or_fail(value, VT::FIXNUM);
-                
+                uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
+
                 value += (1 << FIXNUM_SHIFT);
                 stk.push(value);
                 break;
             }
             case opcode_t::SUB1:
             {
-                uint64_t value = stk.pop();
-                type_check_or_fail(value, VT::FIXNUM);
+                uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 value -= (1 << FIXNUM_SHIFT);
                 stk.push(value);
@@ -184,8 +236,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::INT_TO_CHAR:
             {
-                uint64_t value = stk.pop();
-                type_check_or_fail(value, VT::FIXNUM);
+                uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 value = value >> FIXNUM_SHIFT;  // Remove fixnum tag
                 value = value << CHAR_SHIFT;    // Make space for char tag
@@ -195,8 +246,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::CHAR_TO_INT:
             {
-                uint64_t value = stk.pop();
-                type_check_or_fail(value, VT::CHAR);
+                uint64_t value = stk.pop_and_check_type(VT::CHAR);
 
                 value = value >> CHAR_SHIFT;    // Remove char tag
                 value = value << FIXNUM_SHIFT;  // Make space for fixnum tag
@@ -236,10 +286,64 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::NOT:
             {
-                uint64_t value = stk.pop();
-                type_check_or_fail(value, VT::BOOL);
+                uint64_t value = stk.pop_and_check_type(VT::BOOL);
 
                 resolve_bool(value) ? stk.push(FALSE_BOOL) : stk.push(TRUE_BOOL);
+                break;
+            }
+            case opcode_t::ADD:
+            {
+                uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
+
+                // Remove tag
+                strip_tag(v1);
+
+                // Add and push
+                v2 += v1;
+
+                stk.push(v2);
+                break;
+            }
+            case opcode_t::SUB:
+            {
+                uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
+
+                // Remove tag
+                strip_tag(v1);
+
+                // Sub and push
+                v2 -= v1;
+                stk.push(v2);
+                break;
+            }
+            case opcode_t::MUL:
+            {
+                uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
+
+                v1 = get_fixnum_value(v1);
+                v2 = get_fixnum_value(v2);
+                v1 *= v2;
+                uint64_t res = create_fixnum_ptr(v1);
+                stk.push(res);
+                break;
+            }
+            case opcode_t::LT:
+            {
+                uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
+                
+                v2 < v1 ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
+                break;
+            }
+            case opcode_t::EQL:
+            {
+                uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
+
+                v2 == v1 ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
                 break;
             }
             case opcode_t::RETURN:
