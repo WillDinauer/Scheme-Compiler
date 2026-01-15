@@ -19,9 +19,13 @@
 #define CHAR_SHIFT      8
 #define BOOL_MASK       127
 #define BOOL_TAG        31
+#define BOOL_SHIFT      7
 #define EL_MASK         255
 #define EL_TAG          47
 #define EL_SHIFT        0
+
+#define TRUE_BOOL       (0 | BOOL_TAG)
+#define FALSE_BOOL      ((1 << BOOL_SHIFT) | BOOL_TAG)
 
 // From https://stackoverflow.com/questions/6966425/converting-an-uint64-into-a-fullhex-string-c
 // Print a formatted 64-bit value
@@ -36,9 +40,18 @@ void print_64b(std::string name, uint64_t value) {
 }
 
 // 1 byte opcodes
-enum opcodes : uint8_t {
+enum opcode_t : uint8_t {
     LOAD64 = 0x01,
     RETURN = 0x02,
+    ADD1 = 0x03,
+    SUB1 = 0x04,
+    INT_TO_CHAR = 0x05,
+    CHAR_TO_INT = 0x06,
+    NULL_CHECK = 0x07,
+    ZERO_CHECK = 0x08,
+    INT_CHECK = 0x09,
+    BOOL_CHECK = 0x0A,
+    NOT = 0x0B,
 };
 
 // 8-byte stack values
@@ -79,7 +92,9 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
 enum VT {
     FIXNUM,
     BOOL,
-    CHAR
+    CHAR,
+    EMPTY_LIST,
+    UNKNOWN
 };
 
 // Figure out the type based on the tag information
@@ -97,7 +112,29 @@ VT resolve_type(uint64_t value) {
     if ((value & BOOL_MASK) == BOOL_TAG) {
         return VT::BOOL;
     }
+    if ((value & EL_MASK) == EL_TAG) {
+        return VT::EMPTY_LIST;
+    }
     throw std::runtime_error(std::format("Unable to resolve type for value: {}", value));
+}
+
+// Check if value matches expected type. Throw an error if not
+void type_check_or_fail(uint64_t value, VT desired_type) {
+    VT type = resolve_type(value);
+    if (type != desired_type) {
+        throw std::runtime_error("Type check failed."); // This is a non-descript error message and should be fixed...
+    }
+}
+
+// Convert uint64_t representation of boolean to c++ true/false
+bool resolve_bool(uint64_t value) {
+    type_check_or_fail(value, VT::BOOL);
+    return (value >> BOOL_SHIFT) == 0;
+}
+
+// Convert true/false to #t or #f, respectively
+std::string cpp_bool_to_scheme_bool(bool value) {
+    return value ? "#t" : "#f";
 }
 
 // Run the code
@@ -108,7 +145,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
         // truncate instr to lowest byte
         uint8_t instr = read_word(pc, code);
         switch(instr) {
-            case opcodes::LOAD64:
+            case opcode_t::LOAD64:
             {
                 #ifdef DEBUG_ACTIVE
                     std::cout << "Load called..." << std::endl;
@@ -118,7 +155,85 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 stk.push(value);
                 break;
             }
-            case opcodes::RETURN:
+            case opcode_t::ADD1:
+            {
+                uint64_t value = stk.pop();
+                type_check_or_fail(value, VT::FIXNUM);
+                
+                value += (1 << FIXNUM_SHIFT);
+                stk.push(value);
+                break;
+            }
+            case opcode_t::SUB1:
+            {
+                uint64_t value = stk.pop();
+                type_check_or_fail(value, VT::FIXNUM);
+
+                value -= (1 << FIXNUM_SHIFT);
+                stk.push(value);
+                break;
+            }
+            case opcode_t::INT_TO_CHAR:
+            {
+                uint64_t value = stk.pop();
+                type_check_or_fail(value, VT::FIXNUM);
+
+                value = value >> FIXNUM_SHIFT;  // Remove fixnum tag
+                value = value << CHAR_SHIFT;    // Make space for char tag
+                value |= CHAR_TAG;              // Add char tag
+                stk.push(value);
+                break;
+            }
+            case opcode_t::CHAR_TO_INT:
+            {
+                uint64_t value = stk.pop();
+                type_check_or_fail(value, VT::CHAR);
+
+                value = value >> CHAR_SHIFT;    // Remove char tag
+                value = value << FIXNUM_SHIFT;  // Make space for fixnum tag
+                value |= FIXNUM_TAG;            // Add fixnum tag
+                stk.push(value);
+                break;
+            }
+            case opcode_t::NULL_CHECK:
+            {
+                uint64_t value = stk.pop();
+                VT type = resolve_type(value);
+                type == VT::EMPTY_LIST ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
+                break;
+            }
+            case opcode_t::ZERO_CHECK:
+            {
+                uint64_t value = stk.pop();
+                type_check_or_fail(value, VT::FIXNUM);
+
+                int zero = 0 | FIXNUM_TAG;
+                value == zero ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
+                break;
+            }
+            case opcode_t::INT_CHECK:
+            {
+                uint64_t value = stk.pop();
+                VT type = resolve_type(value);
+                type == VT::FIXNUM ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
+                break;
+            }
+            case opcode_t::BOOL_CHECK:
+            {
+                uint64_t value = stk.pop();
+                VT type = resolve_type(value);
+                type == VT::BOOL ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
+                break;
+            }
+            case opcode_t::NOT:
+            {
+                uint64_t value = stk.pop();
+                type_check_or_fail(value, VT::BOOL);
+
+                resolve_bool(value) ? stk.push(FALSE_BOOL) : stk.push(TRUE_BOOL);
+                break;
+            }
+            case opcode_t::RETURN:
             {
                 #ifdef DEBUG_ACTIVE
                     std::cout << "Return called..." << std::endl;
@@ -148,7 +263,7 @@ std::vector<uint8_t> read_code() {
     int n;
     while ((n = read(0, buf, buf_size)) > 0) {
         for (int i = 0; i < n; i++) {
-            code.push_back(buf[i]);   
+            code.push_back(buf[i]);
         }
     }
 
@@ -159,6 +274,24 @@ int main() {
     std::vector<uint8_t> code = read_code();
     std::unique_ptr<uint64_t> result = interpret(code);
     if (result) {
-        std::cout << *result << std::endl;
+        uint64_t val = * result;
+        VT type = resolve_type(val);
+        switch(type) {
+            case VT::FIXNUM:
+            {
+                std::cout << (val >> FIXNUM_SHIFT) << std::endl;
+                break;
+            }
+            case VT::BOOL:
+            {
+                bool truth_val = resolve_bool(val);
+                std::cout << truth_val << std::endl;
+                break;
+            }
+            default:
+            {
+                throw std::runtime_error(std::format("Unknown type returned! Raw value: {}", val));
+            }
+        }
     }
 }

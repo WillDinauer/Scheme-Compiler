@@ -1,4 +1,5 @@
 import enum
+from parser import Character
 
 # We are assuming 64-bit
 SYSTEM_TYPE = 64
@@ -7,6 +8,15 @@ SYSTEM_TYPE = 64
 class I(enum.IntEnum):
     LOAD64 = enum.auto()
     RETURN = enum.auto()
+    ADD1 = enum.auto()
+    SUB1 = enum.auto()
+    INT_TO_CHAR = enum.auto()
+    CHAR_TO_INT = enum.auto()
+    NULL_CHECK = enum.auto()
+    ZERO_CHECK = enum.auto()
+    INT_CHECK = enum.auto()
+    BOOL_CHECK = enum.auto()
+    NOT = enum.auto()
 
 # Container for shift/tagging information
 class SI:
@@ -57,18 +67,59 @@ class Compiler:
             case int():                 # Int
                 emit(I.LOAD64)
                 emit(box_fixnum(expr))
-            case str():
+            case bool():
                 emit(I.LOAD64)
-                if expr == "#t":        # Bool: T
+                if expr:                # Bool: T
                     emit(box_bool(0))
-                elif expr == "#f":      # Bool: F
+                else:                   # Bool: F
                     emit(box_bool(1))
-                elif len(expr) == 1:    # Char
-                    emit(box_char(expr))
+            case Character():           # Char
+                emit(I.LOAD64)
+                emit(box_char(expr.get_char()))
             case list():
                 if len(expr) == 0:      # Empty list
                     emit(I.LOAD64)
                     emit(box_empty_list())
+                
+                # Function call
+                func_name = expr[0]
+                match func_name:
+                    # Unary functions
+                    case "add1":
+                        self.compile(expr[1])
+                        emit(I.ADD1)
+                    case "sub1":
+                        pass
+                    case "integer->char":
+                        pass
+                    case "char->integer":
+                        pass
+                    case "null?":
+                        pass
+                    case "zero?":
+                        pass
+                    case "not":
+                        pass
+                    case "integer?":
+                        pass
+                    case "boolean?":
+                        pass
+
+                    # Binary functions
+                    case "+":
+                        pass
+                    case "-":
+                        pass
+                    case "*":
+                        pass
+                    case "<":
+                        pass
+                    case "=":
+                        pass
+
+            case str():
+                pass
+                
     
     def compile_function(self, expr):
         self.compile(expr)
