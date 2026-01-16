@@ -7,8 +7,14 @@
 #include <format>
 #include <iomanip>
 
-// debug flag
-// #define DEBUG_ACTIVE
+// Debug flag and message
+#define DEBUG_ACTIVE
+
+#ifdef DEBUG_ACTIVE
+    #define DEBUG_MSG(m) do {std::cout << m << std::endl;} while(0)
+#else
+    #define DEBUG_MSG(m) do {} while(0)
+#endif
 
 // Pointer resolution information
 #define FIXNUM_MASK     3
@@ -24,8 +30,10 @@
 #define EL_TAG          47
 #define EL_SHIFT        0
 
-#define TRUE_BOOL       (0 | BOOL_TAG)
-#define FALSE_BOOL      ((1 << BOOL_SHIFT) | BOOL_TAG)
+#define T_BOOL_VAL      1
+#define F_BOOL_VAL      0
+#define TRUE_BOOL       ((T_BOOL_VAL) << BOOL_SHIFT | BOOL_TAG)
+#define FALSE_BOOL      ((F_BOOL_VAL) << BOOL_SHIFT | BOOL_TAG)
 
 // Value Type
 enum VT {
@@ -35,19 +43,6 @@ enum VT {
     EMPTY_LIST,
     UNKNOWN
 };
-
-
-// From https://stackoverflow.com/questions/6966425/converting-an-uint64-into-a-fullhex-string-c
-// Print a formatted 64-bit value
-void print_64b(std::string name, uint64_t value) {
-    std::cout << name
-              << " Padded Hex: 0x"
-              << std::setw(16)
-              << std::setfill('0')
-              << std::hex
-              << value
-              << std::endl;
-}
 
 // 1 byte opcodes
 enum opcode_t : uint8_t {
@@ -76,22 +71,11 @@ enum opcode_t : uint8_t {
     GET = 0x11,
     DROP = 0x12,
     SQUASH = 0x13,
+
+    // Conditionals
+    JMP = 0x14,
+    JIF = 0x15,
 };
-
-// Read a qword from the code
-uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
-    int word_bytes = 8;
-    uint64_t ret = 0;
-
-    // Read in bytes 1 at a time, little-endian
-    for (int i = 0; i < word_bytes; i++) {
-        uint64_t b = code[pc] << i;
-        ret |= b;
-        pc++;
-    }
-
-    return ret;
-}
 
 uint64_t create_fixnum_ptr(uint64_t num) {
     return (num << FIXNUM_SHIFT) | FIXNUM_TAG;
@@ -99,10 +83,6 @@ uint64_t create_fixnum_ptr(uint64_t num) {
 
 // Figure out the type based on the tag information
 VT resolve_type(uint64_t value) {
-    #ifdef DEBUG_ACTIVE
-        std::cout << "resolving value: " << value << std::endl;
-    #endif
-
     if ((value & FIXNUM_MASK) == FIXNUM_TAG) {
         return VT::FIXNUM;
     }
@@ -163,7 +143,7 @@ uint64_t get_fixnum_value(uint64_t value) {
 // Convert uint64_t representation of boolean to c++ true/false
 bool resolve_bool(uint64_t value) {
     type_check_or_fail(value, VT::BOOL);
-    return (value >> BOOL_SHIFT) == 0;
+    return (value >> BOOL_SHIFT) == T_BOOL_VAL;
 }
 
 // Convert true/false to #t or #f, respectively
@@ -211,26 +191,40 @@ public:
     }
 };
 
+// Read a qword from the code
+uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
+    int word_bytes = 8;
+    uint64_t ret = 0;
+
+    // Read in bytes 1 at a time, little-endian
+    for (int i = 0; i < word_bytes; i++) {
+        uint64_t b = code[pc] << i;
+        ret |= b;
+        pc++;
+    }
+
+    return ret;
+}
+
 // Run the code
 uint64_t interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
     v_stack stk;
     while (pc < code.size()) {
+        DEBUG_MSG(std::format("pc: {}", pc));
         // truncate instr to lowest byte
         uint8_t instr = read_word(pc, code);
         switch(instr) {
             case opcode_t::LOAD64:
             {
-                #ifdef DEBUG_ACTIVE
-                    std::cout << "Load called..." << std::endl;
-                #endif
-                
+                DEBUG_MSG("LOAD");
                 uint64_t value = read_word(pc, code);
                 stk.push(value);
                 break;
             }
             case opcode_t::ADD1:
             {
+                DEBUG_MSG("ADD1");
                 uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 value += (1 << FIXNUM_SHIFT);
@@ -239,6 +233,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::SUB1:
             {
+                DEBUG_MSG("SUB1");
                 uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 value -= (1 << FIXNUM_SHIFT);
@@ -247,6 +242,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::INT_TO_CHAR:
             {
+                DEBUG_MSG("INT_TO_CHAR");
                 uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 value = value >> FIXNUM_SHIFT;  // Remove fixnum tag
@@ -257,6 +253,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::CHAR_TO_INT:
             {
+                DEBUG_MSG("CHAR_TO_INT");
                 uint64_t value = stk.pop_and_check_type(VT::CHAR);
 
                 value = value >> CHAR_SHIFT;    // Remove char tag
@@ -267,6 +264,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::NULL_CHECK:
             {
+                DEBUG_MSG("NULL_CHECK");
                 uint64_t value = stk.pop();
                 VT type = resolve_type(value);
                 type == VT::EMPTY_LIST ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
@@ -274,6 +272,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::ZERO_CHECK:
             {
+                DEBUG_MSG("ZERO_CHECK");
                 uint64_t value = stk.pop();
                 type_check_or_fail(value, VT::FIXNUM);
 
@@ -283,6 +282,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::INT_CHECK:
             {
+                DEBUG_MSG("INT_CHECK");
                 uint64_t value = stk.pop();
                 VT type = resolve_type(value);
                 type == VT::FIXNUM ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
@@ -290,6 +290,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::BOOL_CHECK:
             {
+                DEBUG_MSG("BOOL_CHECK");
                 uint64_t value = stk.pop();
                 VT type = resolve_type(value);
                 type == VT::BOOL ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
@@ -297,6 +298,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::NOT:
             {
+                DEBUG_MSG("NOT");
                 uint64_t value = stk.pop_and_check_type(VT::BOOL);
 
                 resolve_bool(value) ? stk.push(FALSE_BOOL) : stk.push(TRUE_BOOL);
@@ -304,6 +306,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::ADD:
             {
+                DEBUG_MSG("ADD");
                 uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
                 uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
 
@@ -318,6 +321,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::SUB:
             {
+                DEBUG_MSG("SUB");
                 uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
                 uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
 
@@ -331,6 +335,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::MUL:
             {
+                DEBUG_MSG("MUL");
                 uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
                 uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
 
@@ -343,6 +348,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::LT:
             {
+                DEBUG_MSG("LT");
                 uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
                 uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
                 
@@ -351,6 +357,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::EQL:
             {
+                DEBUG_MSG("EQL");
                 uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
                 uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
 
@@ -359,6 +366,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::GET:
             {
+                DEBUG_MSG("GET");
                 uint64_t value = read_word(pc, code);
 
                 // Value becomes an index to reach into on the stack
@@ -372,23 +380,43 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::DROP:
             {
+                DEBUG_MSG("DROP");
                 // Pop and drop the value on the ground
                 stk.pop();
                 break;
             }
             case opcode_t::SQUASH:
             {
+                DEBUG_MSG("SQUASH");
                 uint64_t value = stk.pop();
                 uint64_t dropped = stk.pop();
                 stk.push(value);
                 break;
             }
+            case opcode_t::JMP:
+            {
+                DEBUG_MSG("JMP");
+                uint64_t jump_length = read_word(pc, code);
+                type_check_or_fail(jump_length, VT::FIXNUM);
+                pc += get_fixnum_value(jump_length);
+                break;
+            }
+            case opcode_t::JIF:
+            {
+                DEBUG_MSG("JIF");
+                uint64_t jump_length = read_word(pc, code);
+                uint64_t value = stk.pop();
+                VT type = resolve_type(value);
+                if (type == VT::BOOL && !resolve_bool(value)) {
+                    DEBUG_MSG("JUMP IN JIF...(conditon == '#f')");
+                    type_check_or_fail(jump_length, VT::FIXNUM);
+                    pc += get_fixnum_value(jump_length);
+                }
+                break;
+            }
             case opcode_t::RETURN:
             {
-                #ifdef DEBUG_ACTIVE
-                    std::cout << "Return called..." << std::endl;
-                #endif
-
+                DEBUG_MSG("RETURN");
                 uint64_t value = stk.pop();
                 return value;
             }

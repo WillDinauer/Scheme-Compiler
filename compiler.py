@@ -2,7 +2,8 @@ import enum
 from parser import Character
 
 # We are assuming 64-bit
-SYSTEM_TYPE = 64
+SYSTEM_TYPE =   64
+OP_LEN =        8
 
 # Opcodes
 class I(enum.IntEnum):
@@ -31,6 +32,10 @@ class I(enum.IntEnum):
     GET = enum.auto()
     DROP = enum.auto()
     SQUASH = enum.auto()
+
+    # Conditionals
+    JMP = enum.auto() # jump
+    JIF = enum.auto() # jump if false
 
 # Container for shift/tagging information
 class SI:
@@ -76,7 +81,6 @@ class Compiler:
         self.code = []
 
     def update_environment(self, environment, binding_list):
-        emit = self.code.append
         num_bindings = len(binding_list)
         new_environment = {}
         
@@ -176,6 +180,32 @@ class Compiler:
                         self.compile(expr[2])
                         emit(I.EQL)
 
+                    # Ternary functions
+                    case "if":
+                        # -- If --
+                        self.compile(expr[1])
+
+                        # Potential jump
+                        emit(I.JIF)
+                        ckpt1 = len(self.code)
+                        emit(box_fixnum(0)) # placeholder
+
+                        # -- Then --
+                        self.compile(expr[2])
+
+                        # Jump to AFTER 'else'
+                        emit(I.JMP)
+                        ckpt2 = len(self.code)
+                        emit(box_fixnum(0)) # placeholder
+
+                        # -- Else --
+                        self.compile(expr[3])
+                        ckpt3 = len(self.code)-1 # minus 1 to account for emit(box_fixnum) line
+
+                        # Update placeholder values
+                        self.code[ckpt1] = box_fixnum((ckpt2-ckpt1) * OP_LEN)
+                        self.code[ckpt2] = box_fixnum((ckpt3-ckpt2) * OP_LEN)
+
                     # n-ary functions
                     case "let":
                         bindings = expr[1]
@@ -190,7 +220,9 @@ class Compiler:
                         
 
             case str():
+                # Local variables
                 if expr in environment:
+                    # Duplicate their value onto the top of the stack
                     emit(I.GET)
                     emit(box_fixnum(environment[expr]))
                 
@@ -202,4 +234,4 @@ class Compiler:
     def write_to_stream(self, f):
         print(self.code)
         for op in self.code:
-            f.write(op.to_bytes(8, "little"))
+            f.write(op.to_bytes(OP_LEN, "little"))
