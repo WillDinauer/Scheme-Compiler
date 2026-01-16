@@ -180,9 +180,12 @@ class Compiler:
                     case "let":
                         bindings = expr[1]
                         environment = self.update_environment(environment, bindings)
-                        for sub_expr in expr[2:]:
+                        sub_expressions = expr[2:]
+                        for sub_expr in sub_expressions:
                             self.compile(sub_expr, environment)
-                        for _ in range(len(bindings)):
+                        
+                        # Drop unused return values AND tear down locals
+                        for _ in range(len(bindings) + len(sub_expressions) - 1):
                             emit(I.SQUASH)
                         
 
