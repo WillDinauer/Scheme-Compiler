@@ -70,7 +70,12 @@ enum opcode_t : uint8_t {
     SUB = 0x0D,
     MUL = 0x0E,
     LT = 0x0F,
-    EQL = 0x10
+    EQL = 0x10,
+
+    // For local variables
+    GET = 0x11,
+    DROP = 0x12,
+    SQUASH = 0x13,
 };
 
 // Read a qword from the code
@@ -166,7 +171,6 @@ std::string cpp_bool_to_scheme_bool(bool value) {
     return value ? "#t" : "#f";
 }
 
-
 // 8-byte stack values
 class v_stack {
 private:
@@ -189,6 +193,13 @@ public:
         uint64_t value = pop();
         type_check_or_fail(value, type);
         return value;
+    }
+
+    uint64_t get_value_from_top(uint64_t index) {
+        if (index > s.size()) {
+            throw std::runtime_error(std::format("index {} too great for stack size: {}", index, s.size()));
+        }
+        return s[s.size()-index];
     }
 
     void print_state() {
@@ -344,6 +355,32 @@ uint64_t interpret(std::vector<uint8_t>& code) {
                 uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
 
                 v2 == v1 ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
+                break;
+            }
+            case opcode_t::GET:
+            {
+                uint64_t value = read_word(pc, code);
+
+                // Value becomes an index to reach into on the stack
+                value = get_fixnum_value(value);
+
+                // Reach down into stack and duplicate value at index onto top
+                value = stk.get_value_from_top(value);
+                stk.push(value);
+
+                break;
+            }
+            case opcode_t::DROP:
+            {
+                // Pop and drop the value on the ground
+                stk.pop();
+                break;
+            }
+            case opcode_t::SQUASH:
+            {
+                uint64_t value = stk.pop();
+                uint64_t dropped = stk.pop();
+                stk.push(value);
                 break;
             }
             case opcode_t::RETURN:

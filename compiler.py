@@ -27,6 +27,11 @@ class I(enum.IntEnum):
     LT = enum.auto()
     EQL = enum.auto()
 
+    # Local variables
+    GET = enum.auto()
+    DROP = enum.auto()
+    SQUASH = enum.auto()
+
 # Container for shift/tagging information
 class SI:
     def __init__(self, mask, tag, shift):
@@ -70,7 +75,34 @@ class Compiler:
     def __init__(self):
         self.code = []
 
-    def compile(self, expr):
+    def update_environment(self, environment, binding_list):
+        emit = self.code.append
+        num_bindings = len(binding_list)
+        new_environment = {}
+        
+        # iterate through bindings
+        for i, binding in enumerate(binding_list):
+            variable_name = binding[0]
+
+            # Validate binding variable
+            if not isinstance(variable_name, str):
+                raise ValueError(f"Bad let: Trying to bind non-str variable {variable_name}")
+            if variable_name in new_environment:
+                raise RuntimeError(f"Bad let: Var {variable_name} being bound twice in single let expr.")
+            new_environment[variable_name] = num_bindings - i - 1   # Sub 1 to 0-index
+
+            # Bindings take 1 argument (their value)
+            self.compile(binding[1])
+        
+        for key, value in environment.items():
+            if key not in new_environment:
+                # Update environment for previously allocated locals as well
+                new_environment[key] = value + num_bindings
+        
+        return new_environment
+
+
+    def compile(self, expr, environment = {}):
         emit = self.code.append
         match expr:
             case int():                 # Int
@@ -95,31 +127,31 @@ class Compiler:
                 match func_name:
                     # Unary functions
                     case "add1":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.ADD1)
                     case "sub1":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.SUB1)
                     case "integer->char":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.INT_TO_CHAR)
                     case "char->integer":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.CHAR_TO_INT)
                     case "null?":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.NULL_CHECK)
                     case "zero?":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.ZERO_CHECK)
                     case "not":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.NOT)
                     case "integer?":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.INT_CHECK)
                     case "boolean?":
-                        self.compile(expr[1])
+                        self.compile(expr[1], environment)
                         emit(I.BOOL_CHECK)
 
                     # Binary functions
@@ -144,8 +176,20 @@ class Compiler:
                         self.compile(expr[2])
                         emit(I.EQL)
 
+                    # n-ary functions
+                    case "let":
+                        bindings = expr[1]
+                        environment = self.update_environment(environment, bindings)
+                        for sub_expr in expr[2:]:
+                            self.compile(sub_expr, environment)
+                        for _ in range(len(bindings)):
+                            emit(I.SQUASH)
+                        
+
             case str():
-                pass
+                if expr in environment:
+                    emit(I.GET)
+                    emit(box_fixnum(environment[expr]))
                 
     
     def compile_function(self, expr):

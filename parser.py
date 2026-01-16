@@ -70,7 +70,7 @@ class Parser:
 
     def parse_string(self) -> str:
         start = self.pos
-        while self.pos < self.length and self.peek().isascii() and not self.peek().isspace():
+        while self.pos < self.length and self.peek().isascii() and not self.peek().isspace() and not self.peek() == ')':
             self.pos += 1
         return self.source[start:self.pos]
     
