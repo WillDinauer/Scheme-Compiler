@@ -81,7 +81,7 @@ class Compiler:
     def __init__(self):
         self.code = []
 
-    def update_environment(self, environment, binding_list):
+    def update_environment(self, environment, ops, binding_list):
         num_bindings = len(binding_list)
         new_environment = {}
         
@@ -97,14 +97,14 @@ class Compiler:
             new_environment[variable_name] = num_bindings - i - 1   # Sub 1 to 0-index
 
             # Bindings take 1 argument (their value)
-            self.compile(binding[1])
+            ops += self.compile(binding[1])
         
         for key, value in environment.items():
             if key not in new_environment:
                 # Update environment for previously allocated locals as well
                 new_environment[key] = value + num_bindings
         
-        return new_environment
+        return new_environment, ops
 
 
     def compile(self, expr, environment = {}) -> list:
@@ -208,7 +208,7 @@ class Compiler:
                     # n-ary functions
                     case "let":
                         bindings = expr[1]
-                        environment = self.update_environment(environment, bindings)
+                        environment, ops = self.update_environment(environment, ops, bindings)
                         sub_expressions = expr[2:]
                         for sub_expr in sub_expressions:
                             ops += self.compile(sub_expr, environment)
@@ -216,6 +216,9 @@ class Compiler:
                         # Drop unused return values AND tear down locals
                         for _ in range(len(bindings) + len(sub_expressions) - 1):
                             emit(I.SQUASH)
+
+                    case _:
+                        raise SyntaxError(f"Compiler raised error: calling '{func_name}' as a function is not permitted.")
                         
 
             case str():
@@ -224,6 +227,8 @@ class Compiler:
                     # Duplicate their value onto the top of the stack
                     emit(I.GET)
                     emit(box_fixnum(environment[expr]))
+                else:
+                    raise SyntaxError(f"Compiler raised error: use of undefined variable/function '{expr}'")
         return ops
     
     def compile_function(self, expr, last=True):

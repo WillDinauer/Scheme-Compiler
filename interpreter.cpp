@@ -181,10 +181,10 @@ public:
     }
 
     uint64_t get_value_from_top(uint64_t index) {
-        if (index > s.size()) {
+        if (index > s.size() or s.size() <= 0) {
             throw std::runtime_error(std::format("index {} too great for stack size: {}", index, s.size()));
         }
-        return s[s.size()-index];
+        return s[(s.size()-1) - index];
     }
 
     void print_state() {
@@ -380,10 +380,14 @@ uint64_t interpret(std::vector<uint8_t>& code) {
 
                 // Value becomes an index to reach into on the stack
                 value = get_fixnum_value(value);
+                std::cout << "index: " << value << std::endl;
+                stk.print_state();
 
                 // Reach down into stack and duplicate value at index onto top
                 value = stk.get_value_from_top(value);
+                std::cout << "value: " << value << std::endl;
                 stk.push(value);
+                stk.print_state();
 
                 break;
             }
