@@ -84,7 +84,13 @@ class Parser:
 
 
 def scheme_parse(source: str) -> object:
-    return Parser(source).parse()
+    expressions = []
+
+    sp = Parser(source)
+    while sp.pos < sp.length:
+        expressions.append(sp.parse())
+
+    return expressions
 
 class ParseTests(unittest.TestCase):
     def _parse(self, source: str) -> object:
