@@ -68,7 +68,7 @@ class Parser:
             return Character(val)
         
         # Special characters
-        raise NotImplementedError(f"Special characters not currently supported. Found {val}")
+        raise NotImplementedError(f"Special characters not currently supported. Found '#\{val}'")
 
     def parse_string(self) -> str:
         start = self.pos
