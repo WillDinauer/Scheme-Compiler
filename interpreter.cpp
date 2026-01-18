@@ -380,15 +380,10 @@ uint64_t interpret(std::vector<uint8_t>& code) {
 
                 // Value becomes an index to reach into on the stack
                 value = get_fixnum_value(value);
-                std::cout << "index: " << value << std::endl;
-                stk.print_state();
 
                 // Reach down into stack and duplicate value at index onto top
                 value = stk.get_value_from_top(value);
-                std::cout << "value: " << value << std::endl;
                 stk.push(value);
-                stk.print_state();
-
                 break;
             }
             case opcode_t::DROP:

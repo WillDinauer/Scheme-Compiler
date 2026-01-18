@@ -81,7 +81,7 @@ class Compiler:
     def __init__(self):
         self.code = []
 
-    def update_environment(self, environment, ops, binding_list):
+    def create_new_environment(self, environment, ops, binding_list) -> tuple[dict, list]:
         num_bindings = len(binding_list)
         new_environment = {}
         
@@ -97,7 +97,7 @@ class Compiler:
             new_environment[variable_name] = num_bindings - i - 1   # Sub 1 to 0-index
 
             # Bindings take 1 argument (their value)
-            ops += self.compile(binding[1])
+            ops += self.compile(binding[1], environment)
         
         for key, value in environment.items():
             if key not in new_environment:
@@ -106,8 +106,13 @@ class Compiler:
         
         return new_environment, ops
 
+    def update_indices(self, environment, shift) -> dict:
+        for local in environment:
+            environment[local] += shift
+        return environment
 
-    def compile(self, expr, environment = {}) -> list:
+
+    def compile(self, expr, environment) -> list:
         ops = []
         emit = ops.append
         match expr:
@@ -163,37 +168,37 @@ class Compiler:
 
                     # Binary functions
                     case "+":
-                        ops += self.compile(expr[1])
-                        ops += self.compile(expr[2])
+                        ops += self.compile(expr[1], environment)
+                        ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.ADD)
                     case "-":
-                        ops += self.compile(expr[1])
-                        ops += self.compile(expr[2])
+                        ops += self.compile(expr[1], environment)
+                        ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.SUB)
                     case "*":
-                        ops += self.compile(expr[1])
-                        ops += self.compile(expr[2])
+                        ops += self.compile(expr[1], environment)
+                        ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.MUL)
                     case "<":
-                        ops += self.compile(expr[1])
-                        ops += self.compile(expr[2])
+                        ops += self.compile(expr[1], environment)
+                        ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.LT)
                     case "=":
-                        ops += self.compile(expr[1])
-                        ops += self.compile(expr[2])
+                        ops += self.compile(expr[1], environment)
+                        ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.EQL)
 
                     # Ternary functions
                     case "if":
                         # -- If --
-                        ops += self.compile(expr[1])
+                        ops += self.compile(expr[1], environment)
 
                         # -- Else --
-                        else_code = self.compile(expr[3])
+                        else_code = self.compile(expr[3], environment)
 
                         # -- Then --
                         then_jump = [I.JMP, box_fixnum(len(else_code)) * OP_LEN]
-                        then_code = self.compile(expr[2]) + then_jump
+                        then_code = self.compile(expr[2], environment) + then_jump
 
                         # Potential jump to Else
                         emit(I.JIF)
@@ -208,7 +213,7 @@ class Compiler:
                     # n-ary functions
                     case "let":
                         bindings = expr[1]
-                        environment, ops = self.update_environment(environment, ops, bindings)
+                        environment, ops = self.create_new_environment(environment, ops, bindings)
                         sub_expressions = expr[2:]
                         for sub_expr in sub_expressions:
                             ops += self.compile(sub_expr, environment)
@@ -232,12 +237,16 @@ class Compiler:
         return ops
     
     def compile_function(self, expr, last=True):
-        self.code += self.compile(expr)
+        self.code += self.compile(expr, {})
         last_op = I.RETURN if last else I.DROP
         self.code.append(last_op)
 
     def write_to_stream(self, f):
-        print(self.code)
+        # human-readable
+        with open("code.txt", 'w') as code_file:
+            print(self.code, file=code_file)
+
+        # print bytes
         for op in self.code:
             f.write(op.to_bytes(OP_LEN, "little"))
 
