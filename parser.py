@@ -53,8 +53,10 @@ class Parser:
             case '\\':
                 return self.parse_char()
             case 't':
+                self.pos += 1
                 return True
             case 'f':
+                self.pos += 1
                 return False
     
     def parse_char(self):

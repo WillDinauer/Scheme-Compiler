@@ -91,9 +91,9 @@ class Compiler:
 
             # Validate binding variable
             if not isinstance(variable_name, str):
-                raise ValueError(f"Bad let: Trying to bind non-str variable {variable_name}")
+                raise ValueError(f"Bad let: Trying to bind non-str variable '{variable_name}'")
             if variable_name in new_environment:
-                raise RuntimeError(f"Bad let: Var {variable_name} being bound twice in single let expr.")
+                raise RuntimeError(f"Bad let: local variable '{variable_name}' being bound twice in single let expr.")
             new_environment[variable_name] = num_bindings - i - 1   # Sub 1 to 0-index
 
             # Bindings take 1 argument (their value)
@@ -223,7 +223,7 @@ class Compiler:
                             emit(I.SQUASH)
 
                     case _:
-                        raise SyntaxError(f"Compiler raised error: calling '{func_name}' as a function is not permitted.")
+                        raise SyntaxError(f"Compiler raised error: calling unbound/undefined '{func_name}' as a function.")
                         
 
             case str():
