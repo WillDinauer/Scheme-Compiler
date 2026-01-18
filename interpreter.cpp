@@ -212,6 +212,9 @@ uint64_t interpret(std::vector<uint8_t>& code) {
     v_stack stk;
     while (pc < code.size()) {
         DEBUG_MSG(std::format("pc: {}", pc));
+        #ifdef DEBUG_ACTIVE
+            stk.print_state();
+        #endif 
         // truncate instr to lowest byte
         uint8_t instr = read_word(pc, code);
         switch(instr) {
@@ -408,7 +411,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
                 uint64_t value = stk.pop();
                 VT type = resolve_type(value);
                 if (type == VT::BOOL && !resolve_bool(value)) {
-                    DEBUG_MSG("JUMP IN JIF...(conditon == '#f')");
+                    DEBUG_MSG("JUMP IN JIF...(condition == '#f')");
                     type_check_or_fail(jump_length, VT::FIXNUM);
                     pc += get_fixnum_value(jump_length);
                 }

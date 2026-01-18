@@ -1,5 +1,6 @@
 import enum
-from parser import Character
+import sys
+from parser import Character, scheme_parse
 
 # We are assuming 64-bit
 SYSTEM_TYPE =   64
@@ -106,8 +107,9 @@ class Compiler:
         return new_environment
 
 
-    def compile(self, expr, environment = {}):
-        emit = self.code.append
+    def compile(self, expr, environment = {}) -> list:
+        ops = []
+        emit = ops.append
         match expr:
             case int():                 # Int
                 emit(I.LOAD64)
@@ -122,7 +124,8 @@ class Compiler:
                 emit(I.LOAD64)
                 emit(box_char(expr.get_char()))
             case list():
-                if len(expr) == 0:      # Empty list
+                # Empty list
+                if len(expr) == 0:
                     emit(I.LOAD64)
                     emit(box_empty_list())
                 
@@ -131,80 +134,76 @@ class Compiler:
                 match func_name:
                     # Unary functions
                     case "add1":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.ADD1)
                     case "sub1":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.SUB1)
                     case "integer->char":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.INT_TO_CHAR)
                     case "char->integer":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.CHAR_TO_INT)
                     case "null?":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.NULL_CHECK)
                     case "zero?":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.ZERO_CHECK)
                     case "not":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.NOT)
                     case "integer?":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.INT_CHECK)
                     case "boolean?":
-                        self.compile(expr[1], environment)
+                        ops += self.compile(expr[1], environment)
                         emit(I.BOOL_CHECK)
 
                     # Binary functions
                     case "+":
-                        self.compile(expr[1])
-                        self.compile(expr[2])
+                        ops += self.compile(expr[1])
+                        ops += self.compile(expr[2])
                         emit(I.ADD)
                     case "-":
-                        self.compile(expr[1])
-                        self.compile(expr[2])
+                        ops += self.compile(expr[1])
+                        ops += self.compile(expr[2])
                         emit(I.SUB)
                     case "*":
-                        self.compile(expr[1])
-                        self.compile(expr[2])
+                        ops += self.compile(expr[1])
+                        ops += self.compile(expr[2])
                         emit(I.MUL)
                     case "<":
-                        self.compile(expr[1])
-                        self.compile(expr[2])
+                        ops += self.compile(expr[1])
+                        ops += self.compile(expr[2])
                         emit(I.LT)
                     case "=":
-                        self.compile(expr[1])
-                        self.compile(expr[2])
+                        ops += self.compile(expr[1])
+                        ops += self.compile(expr[2])
                         emit(I.EQL)
 
                     # Ternary functions
                     case "if":
                         # -- If --
-                        self.compile(expr[1])
-
-                        # Potential jump
-                        emit(I.JIF)
-                        ckpt1 = len(self.code)
-                        emit(box_fixnum(0)) # placeholder
-
-                        # -- Then --
-                        self.compile(expr[2])
-
-                        # Jump to AFTER 'else'
-                        emit(I.JMP)
-                        ckpt2 = len(self.code)
-                        emit(box_fixnum(0)) # placeholder
+                        ops += self.compile(expr[1])
 
                         # -- Else --
-                        self.compile(expr[3])
-                        ckpt3 = len(self.code)-1 # minus 1 to account for emit(box_fixnum) line
+                        else_code = self.compile(expr[3])
 
-                        # Update placeholder values
-                        self.code[ckpt1] = box_fixnum((ckpt2-ckpt1) * OP_LEN)
-                        self.code[ckpt2] = box_fixnum((ckpt3-ckpt2) * OP_LEN)
+                        # -- Then --
+                        then_jump = [I.JMP, box_fixnum(len(else_code)) * OP_LEN]
+                        then_code = self.compile(expr[2]) + then_jump
+
+                        # Potential jump to Else
+                        emit(I.JIF)
+                        emit(box_fixnum(len(then_code)) * OP_LEN)
+                        
+                        # Then code (with jump)
+                        ops += then_code
+
+                        # Else code
+                        ops += else_code
 
                     # n-ary functions
                     case "let":
@@ -212,7 +211,7 @@ class Compiler:
                         environment = self.update_environment(environment, bindings)
                         sub_expressions = expr[2:]
                         for sub_expr in sub_expressions:
-                            self.compile(sub_expr, environment)
+                            ops += self.compile(sub_expr, environment)
                         
                         # Drop unused return values AND tear down locals
                         for _ in range(len(bindings) + len(sub_expressions) - 1):
@@ -225,13 +224,31 @@ class Compiler:
                     # Duplicate their value onto the top of the stack
                     emit(I.GET)
                     emit(box_fixnum(environment[expr]))
-                
+        return ops
     
-    def compile_function(self, expr):
-        self.compile(expr)
-        self.code.append(I.RETURN)
+    def compile_function(self, expr, last=True):
+        self.code += self.compile(expr)
+        last_op = I.RETURN if last else I.DROP
+        self.code.append(last_op)
 
     def write_to_stream(self, f):
         print(self.code)
         for op in self.code:
             f.write(op.to_bytes(OP_LEN, "little"))
+
+def compile_program():
+    # Parse the Scheme file (from stdin)
+    source = sys.stdin.read()
+    program = scheme_parse(source)
+
+    # Compile all functions at the root of the file
+    compiler = Compiler()
+    for i, function in enumerate(program):
+        last = i == len(program) - 1
+        compiler.compile_function(function, last)
+
+    # Write the code out
+    compiler.write_to_stream(sys.stdout.buffer)
+
+if __name__ == "__main__":
+    compile_program()
