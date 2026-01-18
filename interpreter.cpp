@@ -146,6 +146,11 @@ bool resolve_bool(uint64_t value) {
     return (value >> BOOL_SHIFT) == T_BOOL_VAL;
 }
 
+char resolve_char(uint64_t value) {
+    type_check_or_fail(value, VT::CHAR);
+    return static_cast<char>(value >> CHAR_SHIFT);
+}
+
 // Convert true/false to #t or #f, respectively
 std::string cpp_bool_to_scheme_bool(bool value) {
     return value ? "#t" : "#f";
@@ -194,11 +199,12 @@ public:
 // Read a qword from the code
 uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
     int word_bytes = 8;
+    int bits_per_byte = 8;
     uint64_t ret = 0;
 
     // Read in bytes 1 at a time, little-endian
     for (int i = 0; i < word_bytes; i++) {
-        uint64_t b = code[pc] << i;
+        uint64_t b = code[pc] << (i * bits_per_byte);
         ret |= b;
         pc++;
     }
@@ -220,7 +226,7 @@ uint64_t interpret(std::vector<uint8_t>& code) {
         switch(instr) {
             case opcode_t::LOAD64:
             {
-                DEBUG_MSG("LOAD");
+                DEBUG_MSG("LOAD64");
                 uint64_t value = read_word(pc, code);
                 stk.push(value);
                 break;
@@ -461,6 +467,12 @@ int main() {
         {
             bool truth_val = resolve_bool(result);
             std::cout << cpp_bool_to_scheme_bool(truth_val) << std::endl;
+            break;
+        }
+        case VT::CHAR:
+        {
+            char c = resolve_char(result);
+            std::cout << c << std::endl;
             break;
         }
         default:

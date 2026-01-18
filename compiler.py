@@ -47,10 +47,10 @@ class SI:
 
 # Mask/shift/tagging information for various types
 SHIFT_INFO = {
-    "fixnum": SI(mask=(1<<2)-1, tag=0, shift=2),
-    "char": SI(mask=(1<<9)-1, tag=(1<<5)-1, shift=8),
-    "bool": SI(mask=(1<<8)-1, tag=(1<<6)-1, shift=7),
-    "empty_list": SI(mask=(1<<9)-1, tag=47, shift=0)    # EL value is the tag...?
+    "fixnum": SI(mask=3, tag=0, shift=2),
+    "char": SI(mask=255, tag=15, shift=8),
+    "bool": SI(mask=127, tag=31, shift=7),
+    "empty_list": SI(mask=255, tag=47, shift=0)    # EL value is the tag...?
 }
 
 def tag_ptr(value, type):
