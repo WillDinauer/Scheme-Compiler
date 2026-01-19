@@ -2,6 +2,8 @@ import enum
 import sys
 from parser import Character, scheme_parse
 
+LOG_TAG = "[COMPILER]"
+
 # We are assuming 64-bit
 SYSTEM_TYPE =   64
 OP_LEN =        8
@@ -77,6 +79,17 @@ def box_bool(val):
 def box_empty_list():
     return tag_ptr(0, "empty_list")
 
+def compiler_error(msg):
+    raise SyntaxError(f"{LOG_TAG}: {msg}")
+
+def validate_args(expr, *args):
+    if len(args) != len(expr[1:]):
+        error_msg = f"Invalid usage of function '{expr[0]}' - Usage: ({expr[0]}"
+        for arg in args:
+            error_msg += " " + arg
+        error_msg += ")"
+        compiler_error(error_msg)
+
 class Compiler:
     def __init__(self):
         self.code = []
@@ -91,9 +104,9 @@ class Compiler:
 
             # Validate binding variable
             if not isinstance(variable_name, str):
-                raise ValueError(f"Bad let: Trying to bind non-str variable '{variable_name}'")
+                compiler_error(f"Bad let: Trying to bind non-str variable '{variable_name}'")
             if variable_name in new_environment:
-                raise RuntimeError(f"Bad let: local variable '{variable_name}' being bound twice in single let expr.")
+                compiler_error(f"Bad let: local variable '{variable_name}' being bound twice in single let expr.")
             new_environment[variable_name] = num_bindings - i - 1   # Sub 1 to 0-index
 
             # Bindings take 1 argument (their value)
@@ -110,7 +123,6 @@ class Compiler:
         for local in environment:
             environment[local] += shift
         return environment
-
 
     def compile(self, expr, environment) -> list:
         ops = []
@@ -139,57 +151,72 @@ class Compiler:
                 match func_name:
                     # Unary functions
                     case "add1":
+                        validate_args(expr, "fixnum")
                         ops += self.compile(expr[1], environment)
                         emit(I.ADD1)
                     case "sub1":
+                        validate_args(expr, "fixnum")
                         ops += self.compile(expr[1], environment)
                         emit(I.SUB1)
                     case "integer->char":
+                        validate_args(expr, "fixnum")
                         ops += self.compile(expr[1], environment)
                         emit(I.INT_TO_CHAR)
                     case "char->integer":
+                        validate_args(expr, "char")
                         ops += self.compile(expr[1], environment)
                         emit(I.CHAR_TO_INT)
                     case "null?":
+                        validate_args(expr, "any")
                         ops += self.compile(expr[1], environment)
                         emit(I.NULL_CHECK)
                     case "zero?":
+                        validate_args(expr, "fixnum")
                         ops += self.compile(expr[1], environment)
                         emit(I.ZERO_CHECK)
                     case "not":
+                        validate_args(expr, "bool")
                         ops += self.compile(expr[1], environment)
                         emit(I.NOT)
                     case "integer?":
+                        validate_args(expr, "any")
                         ops += self.compile(expr[1], environment)
                         emit(I.INT_CHECK)
                     case "boolean?":
+                        validate_args(expr, "any")
                         ops += self.compile(expr[1], environment)
                         emit(I.BOOL_CHECK)
 
                     # Binary functions
                     case "+":
+                        validate_args(expr, "fixnum", "fixnum")
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.ADD)
                     case "-":
+                        validate_args(expr, "fixnum", "fixnum")
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.SUB)
                     case "*":
+                        validate_args(expr, "fixnum", "fixnum")
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.MUL)
                     case "<":
+                        validate_args(expr, "fixnum", "fixnum")
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.LT)
                     case "=":
+                        validate_args(expr, "fixnum", "fixnum")
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.EQL)
 
                     # Ternary functions
                     case "if":
+                        validate_args(expr, "bool", "any", "any")
                         # -- If --
                         ops += self.compile(expr[1], environment)
 
@@ -223,7 +250,7 @@ class Compiler:
                             emit(I.SQUASH)
 
                     case _:
-                        raise SyntaxError(f"Compiler raised error: calling unbound/undefined '{func_name}' as a function.")
+                        compiler_error(f"Calling unbound/undefined '{func_name}' as a function.")
                         
 
             case str():
@@ -233,7 +260,7 @@ class Compiler:
                     emit(I.GET)
                     emit(box_fixnum(environment[expr]))
                 else:
-                    raise SyntaxError(f"Compiler raised error: use of undefined variable/function '{expr}'")
+                    compiler_error(f"Use of undefined variable/function '{expr}'")
         return ops
     
     def compile_function(self, expr, last=True):
