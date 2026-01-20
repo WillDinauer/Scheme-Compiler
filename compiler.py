@@ -155,6 +155,10 @@ class Compiler:
                 
                 # Function call
                 func_name = expr[0]
+                if func_name in environment:
+                    # TODO: this might change as we add additional functionality
+                    raise SyntaxError(f"invalid use of local variable '{func_name}' as function")
+
                 match func_name:
                     # Unary functions
                     case "add1":
