@@ -165,9 +165,13 @@ public:
         s.push_back(value);
     }
 
+    bool empty() {
+        return s.empty();
+    }
+
     uint64_t pop() {
         if (s.size() <= 0) {
-            return 0;
+            throw std::runtime_error("attempt to pop from empty stack.");
         }
         int value = s.back();
         s.pop_back();
@@ -213,7 +217,7 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
 }
 
 // Run the code
-uint64_t interpret(std::vector<uint8_t>& code) {
+std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
     v_stack stk;
     while (pc < code.size()) {
@@ -425,8 +429,11 @@ uint64_t interpret(std::vector<uint8_t>& code) {
             case opcode_t::RETURN:
             {
                 DEBUG_MSG("RETURN");
+                if (stk.empty()) {
+                    return nullptr; 
+                }
                 uint64_t value = stk.pop();
-                return value;
+                return std::make_unique<uint64_t>(value);
             }
             default:
             {
@@ -454,30 +461,35 @@ std::vector<uint8_t> read_code() {
 
 int main() {
     std::vector<uint8_t> code = read_code();
-    uint64_t result = interpret(code);
-    VT type = resolve_type(result);
-    switch(type) {
-        case VT::FIXNUM:
-        {
-            std::cout << (result >> FIXNUM_SHIFT) << std::endl;
-            break;
+    std::unique_ptr<uint64_t> result_ptr = interpret(code);
+    
+    // Validate the ptr
+    if (result_ptr) {
+        uint64_t result = *result_ptr;
+        VT type = resolve_type(result);
+        switch(type) {
+            case VT::FIXNUM:
+            {
+                std::cout << (result >> FIXNUM_SHIFT) << std::endl;
+                break;
+            }
+            case VT::BOOL:
+            {
+                bool truth_val = resolve_bool(result);
+                std::cout << cpp_bool_to_scheme_bool(truth_val) << std::endl;
+                break;
+            }
+            case VT::CHAR:
+            {
+                char c = resolve_char(result);
+                std::cout << c << std::endl;
+                break;
+            }
+            default:
+            {
+                throw std::runtime_error(std::format("Unknown type returned! Raw value: {}", result));
+            }
         }
-        case VT::BOOL:
-        {
-            bool truth_val = resolve_bool(result);
-            std::cout << cpp_bool_to_scheme_bool(truth_val) << std::endl;
-            break;
-        }
-        case VT::CHAR:
-        {
-            char c = resolve_char(result);
-            std::cout << c << std::endl;
-            break;
-        }
-        default:
-        {
-            throw std::runtime_error(std::format("Unknown type returned! Raw value: {}", result));
-        }
+        return 0;
     }
-    return 0;
 }

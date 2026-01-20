@@ -278,10 +278,8 @@ class Compiler:
                     compiler_error(f"Use of undefined variable/function '{expr}'")
         return ops
     
-    def compile_function(self, expr, last=True):
+    def compile_function(self, expr):
         self.code += self.compile(expr, {})
-        last_op = I.RETURN if last else I.DROP
-        self.code.append(last_op)
 
     def write_to_stream(self, f):
         # human-readable
@@ -291,6 +289,12 @@ class Compiler:
         # print bytes
         for op in self.code:
             f.write(op.to_bytes(OP_LEN, "little"))
+    
+    def drop_return_value(self):
+        self.code.append(I.DROP)
+
+    def add_ret(self):
+        self.code.append(I.RETURN)
 
 def compile_program():
     # Parse the Scheme file (from stdin)
@@ -300,8 +304,14 @@ def compile_program():
     # Compile all functions at the root of the file
     compiler = Compiler()
     for i, function in enumerate(program):
-        last = i == len(program) - 1
-        compiler.compile_function(function, last)
+        compiler.compile_function(function)
+
+        # Drop value (except for the last function)
+        if i < len(program) - 1:
+            compiler.drop_return_value()
+
+    # Last value should be returned
+    compiler.add_ret()
 
     # Write the code out
     compiler.write_to_stream(sys.stdout.buffer)
