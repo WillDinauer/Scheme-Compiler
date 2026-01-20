@@ -13,6 +13,9 @@ class Parser:
         self.pos = 0
         self.length = len(source)
 
+    def finished(self):
+        return self.pos >= self.length
+
     def parse(self) -> object:
         self.skip_whitespace()
         match self.peek():
@@ -31,10 +34,63 @@ class Parser:
                 return self.parse_string()
             case c:
                 raise NotImplementedError(f"Unhandled character {c}")
+    
+    # Increment the place in the file, raise error if reached EOF.
+    def try_increment(self, err):
+        self.pos += 1
+        if self.finished():
+            raise err
+    
+    # Look for a '|#' block. When the function is called, we assumed pos is at the '|' of the '#|' entry.
+    # After this function concludes, pos will be placed AFTER the ending of the block '|#'.
+    def skip_comment(self):
+        err = SyntaxError("Unclosed comment block.")
+        self.try_increment(err)
+        while True:
+            if self.peek() == '|':
+                self.try_increment(err)
+                if self.peek() == '#':
+                    self.pos += 1
+                    return
+                
+            elif self.peek() == '#':
+                self.try_increment(err)
+                if self.peek() == '|':
+                    # Nested comments must be handled
+                    self.skip_comment()
+
+            else:
+                # We should never increment having not checked the char
+                self.try_increment(err)
             
     def skip_whitespace(self):
+        if self.finished():
+            return
+        
         while self.peek().isspace():
             self.pos += 1
+            if self.pos >= self.length:
+                return
+        
+         # Ignore comments
+        if self.peek() == ';':
+            while self.peek() != '\n':
+                self.pos += 1
+                if self.pos >= self.length:
+                    return
+            self.skip_whitespace()
+        
+        # Ignore comment blocks
+        if self.peek() == '#':
+            self.try_increment(SyntaxError("Invalid character '#' at EOF."))
+            if self.peek() == '|':
+                # Guaranteed to place pos after end of comment block
+                self.skip_comment()
+                self.skip_whitespace()
+            else:
+                # Back up! We need to parse this '#' as non-whitespace
+                self.pos -= 1
+
 
     def peek(self):
         return self.source[self.pos]
