@@ -97,9 +97,16 @@ class Compiler:
     def create_new_environment(self, environment, ops, binding_list) -> tuple[dict, list]:
         num_bindings = len(binding_list)
         new_environment = {}
+
+        # binding list must be a list
+        if not isinstance(binding_list, list):
+            compiler_error(f"Bad let: Binding list is not a list - {binding_list}")
         
         # iterate through bindings
         for i, binding in enumerate(binding_list):
+            # Validate individual binding
+            if not isinstance(binding, list) or len(binding) != 2:
+                compiler_error(f"Bad let: Invalid binding '{binding}' - bindings are of form (symbol value)")
             variable_name = binding[0]
 
             # Validate binding variable
@@ -239,8 +246,16 @@ class Compiler:
 
                     # n-ary functions
                     case "let":
+                        form_error_str = f"'let' must be of form: (let ((symbol_1 value_2) ... (symbol_n value_n)) expr_1 ... expr_n)"
+                        # Check length of expression
+                        if len(expr) < 3:
+                            compiler_error(form_error_str)
                         bindings = expr[1]
+                        
+                        # Handle bindings
                         environment, ops = self.create_new_environment(environment, ops, bindings)
+                        
+                        # Compile all sub expressions
                         sub_expressions = expr[2:]
                         for sub_expr in sub_expressions:
                             ops += self.compile(sub_expr, environment)
