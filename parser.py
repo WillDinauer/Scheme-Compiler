@@ -47,16 +47,18 @@ class Parser:
         err = SyntaxError("Unclosed comment block.")
         self.try_increment(err)
         while True:
+            # Search for end of comment block
             if self.peek() == '|':
                 self.try_increment(err)
                 if self.peek() == '#':
                     self.pos += 1
                     return
-                
+            
+            # Search for a nested comment block
             elif self.peek() == '#':
                 self.try_increment(err)
                 if self.peek() == '|':
-                    # Nested comments must be handled
+                    # Recursive call
                     self.skip_comment()
 
             else:
@@ -91,7 +93,6 @@ class Parser:
                 # Back up! We need to parse this '#' as non-whitespace
                 self.pos -= 1
 
-
     def peek(self):
         return self.source[self.pos]
 
@@ -99,6 +100,7 @@ class Parser:
         start = self.pos
         while self.pos < self.length and self.peek().isdigit():
             self.pos += 1
+
         return int(self.source[start:self.pos])
     
     def parse_special(self):

@@ -257,11 +257,15 @@ class Compiler:
                         
                         # Compile all sub expressions
                         sub_expressions = expr[2:]
-                        for sub_expr in sub_expressions:
+                        for i, sub_expr in enumerate(sub_expressions):
                             ops += self.compile(sub_expr, environment)
+                            
+                            # Drop unused return values
+                            if i < len(sub_expressions) - 1:
+                                emit(I.DROP)
                         
-                        # Drop unused return values AND tear down locals
-                        for _ in range(len(bindings) + len(sub_expressions) - 1):
+                        # Tear down local variables
+                        for _ in range(len(bindings)):
                             emit(I.SQUASH)
 
                     case _:
