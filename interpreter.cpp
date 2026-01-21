@@ -208,7 +208,7 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
 
     // Read in bytes 1 at a time, little-endian
     for (int i = 0; i < word_bytes; i++) {
-        uint64_t b = code[pc] << (i * bits_per_byte);
+        uint64_t b = (uint64_t)code[pc] << (i * bits_per_byte);
         ret |= b;
         pc++;
     }
@@ -224,7 +224,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
         DEBUG_MSG(std::format("pc: {}", pc));
         #ifdef DEBUG_ACTIVE
             stk.print_state();
-        #endif 
+        #endif
         // truncate instr to lowest byte
         uint8_t instr = read_word(pc, code);
         switch(instr) {
@@ -289,7 +289,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 uint64_t value = stk.pop();
                 type_check_or_fail(value, VT::FIXNUM);
 
-                int zero = 0 | FIXNUM_TAG;
+                uint64_t zero = FIXNUM_TAG;
                 value == zero ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
                 break;
             }
@@ -401,7 +401,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             {
                 DEBUG_MSG("SQUASH");
                 uint64_t value = stk.pop();
-                uint64_t dropped = stk.pop();
+                stk.pop();
                 stk.push(value);
                 break;
             }
@@ -445,12 +445,11 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
 }
 
 std::vector<uint8_t> read_code() {
-    int buf_size = 4096;
-    uint8_t buf[buf_size];
+    uint8_t buf[4096];
     std::vector<uint8_t> code;
 
     int n;
-    while ((n = read(0, buf, buf_size)) > 0) {
+    while ((n = read(0, buf, sizeof(buf))) > 0) {
         for (int i = 0; i < n; i++) {
             code.push_back(buf[i]);
         }
@@ -462,7 +461,7 @@ std::vector<uint8_t> read_code() {
 int main() {
     std::vector<uint8_t> code = read_code();
     std::unique_ptr<uint64_t> result_ptr = interpret(code);
-    
+
     // Validate the ptr
     if (result_ptr) {
         uint64_t result = *result_ptr;

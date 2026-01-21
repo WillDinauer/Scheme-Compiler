@@ -18,6 +18,8 @@ class Parser:
 
     def parse(self) -> object:
         self.skip_whitespace()
+        if self.finished():
+            return
         match self.peek():
             case '':
                 raise EOFError("Unexpected end of input")
@@ -81,6 +83,7 @@ class Parser:
                 if self.pos >= self.length:
                     return
             self.skip_whitespace()
+            return
         
         # Ignore comment blocks
         if self.peek() == '#':
@@ -148,8 +151,9 @@ def scheme_parse(source: str) -> object:
 
     sp = Parser(source)
     while sp.pos < sp.length:
-        expressions.append(sp.parse())
-
+        expr = sp.parse()
+        if expr:
+            expressions.append(expr)
     return expressions
 
 class ParseTests(unittest.TestCase):
