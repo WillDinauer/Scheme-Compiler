@@ -127,9 +127,10 @@ class Compiler:
         return new_environment, ops
 
     def update_indices(self, environment, shift) -> dict:
-        for local in environment:
-            environment[local] += shift
-        return environment
+        new_environment = environment.copy()
+        for local in new_environment:
+            new_environment[local] += shift
+        return new_environment
 
     def compile(self, expr, environment) -> list:
         ops = []

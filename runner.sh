@@ -1,23 +1,68 @@
 #!/bin/bash
 
+COMPILED_FILE=compiled.bc
+# Colors
+RED="\033[0;31m"
+GREEN="\033[0;32m"
+NC="\033[0m"
+
 # Check number of args for usage
 if [[ $# -ne 1 ]]; then
-    echo "Usage: ./runner.sh scheme_file_name.scm"
+    echo "Usage: ./runner.sh scheme_file.scm"
     exit -1
 fi
 
+compile() {
+    python3 compiler.py < $1 > $2
+}
+
+# -- Run all the tests --
+if [[ "$1" == "tests" ]]; then
+    TEMP=tests/temp.txt
+    for test_dir in tests/*; do
+        if [ -d "$test_dir" ]; then
+            TEST=$(basename $test_dir)
+            echo -n "Running test $TEST..."
+            compile "$test_dir/test.scm" "tests/$COMPILED_FILE"
+
+            if [[ $? -ne 0 ]]; then
+                rm "tests/$COMPILED_FILE"
+                echo "Compilation failed for test $TEST"
+                exit -1
+            fi
+            
+            # Run interpreter
+            ./interpreter < "tests/$COMPILED_FILE" > "$TEMP"
+            if cmp -s $TEMP $test_dir/expected.txt; then
+                echo -e "${GREEN}PASSED.${NC}"
+            else
+                echo -e "${RED}FAILED.${NC}"
+                echo "Running diff to compare."
+                diff $TEMP $test_dir/expected.txt
+            fi
+
+            # Clean up
+            rm "tests/$COMPILED_FILE"
+            rm "tests/temp.txt"
+        fi
+    done
+    exit 0
+fi
+
+
+# -- Run a specific test -- 
 echo "[RUNNER] Compiling '$1' to bytecode..."
-python3 compiler.py < $1 > compiled.bc
+compile $1 $COMPILED_FILE
 
 if [[ $? -ne 0 ]]; then
     echo "[RUNNER] Compilation failed."
-    exit -2
+    exit -1
 fi
 
 echo "[RUNNER] Done."
 echo "[RUNNER] Invoking interpreter to run compiled bytecode."
 echo
-./interpreter < compiled.bc
+./interpreter < $COMPILED_FILE
 echo
 echo "[RUNNER] Done."
 

@@ -4,8 +4,6 @@ __pycache__
 
 *.bc
 *.exe
-test*
 interpreter
 code.txt
-
-!test.scm
+!tests/

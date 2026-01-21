@@ -384,6 +384,9 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
 
                 // Value becomes an index to reach into on the stack
                 value = get_fixnum_value(value);
+                #ifdef DEBUG_ACTIVE
+                    std::cout << "Get Index: " << value << std::endl;
+                #endif
 
                 // Reach down into stack and duplicate value at index onto top
                 value = stk.get_value_from_top(value);
