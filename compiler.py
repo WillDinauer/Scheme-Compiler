@@ -7,6 +7,8 @@ LOG_TAG = "[COMPILER]"
 # We are assuming 64-bit
 SYSTEM_TYPE =   64
 OP_LEN =        8
+T_BOOL_VAL =    1
+F_BOOL_VAL =    0
 
 # Opcodes
 class I(enum.IntEnum):
@@ -136,15 +138,15 @@ class Compiler:
         ops = []
         emit = ops.append
         match expr:
-            case int():                 # Int
-                emit(I.LOAD64)
-                emit(box_fixnum(expr))
             case bool():
                 emit(I.LOAD64)
                 if expr:                # Bool: T
-                    emit(box_bool(0))
+                    emit(box_bool(T_BOOL_VAL))
                 else:                   # Bool: F
-                    emit(box_bool(1))
+                    emit(box_bool(F_BOOL_VAL))
+            case int():                 # Int
+                emit(I.LOAD64)
+                emit(box_fixnum(expr))
             case Character():           # Char
                 emit(I.LOAD64)
                 emit(box_char(expr.get_char()))
@@ -153,6 +155,7 @@ class Compiler:
                 if len(expr) == 0:
                     emit(I.LOAD64)
                     emit(box_empty_list())
+                    return ops
                 
                 # Function call
                 func_name = expr[0]

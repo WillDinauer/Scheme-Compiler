@@ -1,0 +1,1 @@
+(boolean? (zero? (sub1 (* 1 5000))))

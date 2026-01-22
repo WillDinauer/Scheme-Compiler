@@ -1,6 +1,8 @@
 # Scheme-Compiler
 
 ## Usage
+
+For a particular scheme file:
 ```
 ./runner.sh scheme_file_name.sh
 ```
@@ -9,6 +11,12 @@ For example,
 ./runner.sh test.scm
 ```
 This script will parse and compile the Scheme file into `compiled.bc`, which is passed to the interpreter for running.
+
+To run all the tests, run:
+```
+./runner.sh tests
+```
+This will test that every scheme file in the `tests/` directory builds AND produces expected ouput.
 
 ## Parser and Compiler
 
@@ -19,6 +27,8 @@ python3 compiler.py < test.scm > test.bc
 The file `test.bc` then contains the bytecode (which can be run by the interpreter).
 
 ## Interpreter
+
+To build the interpreter, run `make`. Running `make clean` will allow for a fresh build of the interpreter.
 
 The interpreter expects custom bytecode from stdin, as produced by the compiler. To enable debugging in the interpreter, uncomment the `#define DEBUG_ACTIVE` line for some tracing. It can be run independently such as:
 ```
