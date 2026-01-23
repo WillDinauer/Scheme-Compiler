@@ -4,15 +4,19 @@ class Character:
     def __init__(self, c: str):
         self.c = c
 
-    def get_char(self):
+    def to_string(self):
         return self.c
 
 # Strings are just an array of characters
 class String:
-    def __init__(self, string: str):
-        self.char_array = []
-        for i in range(len(string)):
-            self.char_array.append(Character(string[i]))
+    def __init__(self, char_array):
+        self.char_array = char_array
+    
+    def to_string(self):
+        result = ""
+        for c in self.char_array:
+            result += c.to_string()
+        return result
 
 class Parser:
     def __init__(self, source: str):
@@ -39,8 +43,10 @@ class Parser:
             case ')':
                 self.pos += 1
                 return None
-            case c if c.isascii():
+            case '\"':
                 return self.parse_string()
+            case c if c.isascii():
+                return self.parse_symbol()
             case c:
                 raise NotImplementedError(f"Unhandled character {c}")
     
@@ -133,7 +139,7 @@ class Parser:
     
     def parse_char(self):
         self.pos += 1
-        val: str = self.parse_string()
+        val: str = self.parse_symbol()
 
         # Typical Characters
         if len(val) == 1 and val.isascii():
@@ -148,8 +154,42 @@ class Parser:
             case "tab":
                 return Character('\t')
         raise NotImplementedError(f"Invalid or unsupported character. Found '#\{val}'")
-
+    
     def parse_string(self) -> str:
+        syntax_err = SyntaxError("Parsing error - unterminated string")
+        self.try_increment(syntax_err)
+        chars = []
+        # Check for un-escaped quotes
+        escaped = False
+
+        while escaped or (not self.peek() == '\"'):
+            # Match on special escaped characters
+            if escaped:
+                match self.peek():
+                    case 'n':
+                        chars.append(Character('\n'))
+                    case 't':
+                        chars.append(Character('\t'))
+                    case '"':
+                        chars.append(Character('\"'))
+                    case '\\':
+                        chars.append(Character('\\'))
+                    case '\'':
+                        chars.append(Character('\''))
+                    case _:
+                        raise SyntaxError(f"Unknown/unhandled escaped character in string: {self.peek()}")
+                escaped = False
+            # Check for escape character
+            elif self.peek() == '\\':
+                escaped = True
+            # Not escaped, just append character
+            else:
+                chars.append(Character(self.peek()))
+            self.try_increment(syntax_err)
+        self.pos += 1
+        return String(chars)
+
+    def parse_symbol(self) -> str:
         start = self.pos
         while self.pos < self.length and self.peek().isascii() and not self.is_delim(self.peek()):
             self.pos += 1
@@ -176,6 +216,7 @@ def scheme_parse(source: str) -> object:
 
 class ParseTests(unittest.TestCase):
     def _parse(self, source: str) -> object:
+        print(source)
         return Parser(source).parse()
 
     def test_parse_fixnum(self):
@@ -191,19 +232,32 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(self._parse("#f"), False)
 
     def test_parse_character(self):
-        self.assertEqual(self._parse("#\c").get_char(), Character("c").get_char())
+        self.assertEqual(self._parse("#\c").to_string(), Character("c").to_string())
 
-    def test_parse_string(self):
+    def test_parse_symbol(self):
         self.assertEqual(self._parse("add1"), "add1")
 
     def test_parse_expr(self):
         self.assertEqual(self._parse("(add1 2)"), ["add1", 2])
 
-    def test_parse__nested_list(self):
+    def test_parse_nested_list(self):
         self.assertEqual(self._parse("(+ 2 (+ 3 4))"), ["+", 2, ["+", 3, 4]])
 
     def test_parse_multiple_nested_list(self):
         self.assertEqual(self._parse("(= (+ 1 2) (- 4 1))"), ["=", ["+", 1, 2], ["-", 4, 1]])
+
+    def test_parse_string(self):
+        result = self._parse("(string-append \"ab\" \"cd\")")
+        result[1] = result[1].to_string()
+        result[2] = result[2].to_string()
+        self.assertEqual(result, ["string-append", String([Character('a'), Character('b')]).to_string(), String([Character('c'), Character('d')]).to_string()])
+
+    def test_parse_complex_string(self):
+        result = self._parse("(string-append \"a\\\"\" \"c\\\"\\\"\")")
+        result[1] = result[1].to_string()
+        result[2] = result[2].to_string()
+        self.assertEqual(result, ["string-append", String([Character('a'), Character('\"')]).to_string(), String([Character('c'), Character('\"'), Character('\"')]).to_string()])
+    
 
 if __name__ == "__main__":
     unittest.main()
