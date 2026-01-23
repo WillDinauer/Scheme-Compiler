@@ -9,4 +9,4 @@ $(TARGET): $(SRC)
 	$(CXX) $(FLAGS) $(SRC) -o $(TARGET)
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) code.txt compiled.bc

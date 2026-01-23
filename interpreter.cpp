@@ -8,13 +8,16 @@
 #include <iomanip>
 
 // Debug flag and message
-// #define DEBUG_ACTIVE
+#define DEBUG_ACTIVE
 
 #ifdef DEBUG_ACTIVE
     #define DEBUG_MSG(m) do {std::cout << m << std::endl;} while(0)
 #else
     #define DEBUG_MSG(m) do {} while(0)
 #endif
+
+// # of bytes per word
+#define WORD_BYTES      8
 
 // Pointer resolution information
 #define FIXNUM_MASK     3
@@ -30,6 +33,14 @@
 #define EL_TAG          47
 #define EL_SHIFT        0
 
+#define PTR_MASK        7
+#define PAIR_TAG        1
+#define VECTOR_TAG      2
+#define STRING_TAG      3
+#define SYMBOL_TAG      5
+#define CLOSURE_TAG     6
+#define LAST_3_BITS_0  -8
+
 #define T_BOOL_VAL      1
 #define F_BOOL_VAL      0
 #define TRUE_BOOL       ((T_BOOL_VAL) << BOOL_SHIFT | BOOL_TAG)
@@ -41,6 +52,11 @@ enum VT {
     BOOL,
     CHAR,
     EMPTY_LIST,
+    PAIR,
+    VECTOR,
+    STRING,
+    SYMBOL,
+    CLOSURE,
     UNKNOWN
 };
 
@@ -75,6 +91,11 @@ enum opcode_t : uint8_t {
     // Conditionals
     JMP = 0x14,
     JIF = 0x15,
+
+    // Cons
+    CONS = 0x16,
+    CAR = 0x17,
+    CDR = 0x18,
 };
 
 uint64_t create_fixnum_ptr(uint64_t num) {
@@ -95,6 +116,18 @@ VT resolve_type(uint64_t value) {
     if ((value & EL_MASK) == EL_TAG) {
         return VT::EMPTY_LIST;
     }
+    switch (value & PTR_MASK) {
+        case PAIR_TAG:
+            return VT::PAIR;
+        case VECTOR_TAG:
+            return VT::VECTOR;
+        case STRING_TAG:
+            return VT::STRING;
+        case SYMBOL_TAG:
+            return VT::SYMBOL;
+        case CLOSURE_TAG:
+            return VT::CLOSURE;
+    }
     throw std::runtime_error(std::format("Unable to resolve type for value: {}", value));
 }
 
@@ -103,6 +136,12 @@ void type_check_or_fail(uint64_t value, VT desired_type) {
     VT type = resolve_type(value);
     if (type != desired_type) {
         throw std::runtime_error("Type check failed."); // This is a non-descript error message and should be fixed...
+    }
+}
+
+void validate_allocation(uint64_t* hp, uint64_t* heap_end, uint64_t size) {
+    if (hp + size > heap_end) {
+        throw std::runtime_error("Ran out of heap space.");
     }
 }
 
@@ -124,6 +163,15 @@ void strip_tag(uint64_t& value) {
         {
             shift = CHAR_SHIFT;
             break;
+        }
+        case VT::PAIR:
+        case VT::VECTOR:
+        case VT::STRING:
+        case VT::SYMBOL:
+        case VT::CLOSURE:
+        {
+            value &= LAST_3_BITS_0;
+            return;
         }
         default:
         {
@@ -173,7 +221,7 @@ public:
         if (s.size() <= 0) {
             throw std::runtime_error("attempt to pop from empty stack.");
         }
-        int value = s.back();
+        uint64_t value = s.back();
         s.pop_back();
         return value;
     }
@@ -202,12 +250,11 @@ public:
 
 // Read a qword from the code
 uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
-    int word_bytes = 8;
     int bits_per_byte = 8;
     uint64_t ret = 0;
 
     // Read in bytes 1 at a time, little-endian
-    for (int i = 0; i < word_bytes; i++) {
+    for (int i = 0; i < WORD_BYTES; i++) {
         uint64_t b = (uint64_t)code[pc] << (i * bits_per_byte);
         ret |= b;
         pc++;
@@ -220,6 +267,11 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
 std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
     v_stack stk;
+
+    static uint64_t heap[1024];
+    uint64_t* hp = heap;
+    uint64_t* heap_end = hp + 1024;
+
     while (pc < code.size()) {
         DEBUG_MSG(std::format("pc: {}", pc));
         #ifdef DEBUG_ACTIVE
@@ -429,6 +481,46 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 }
                 break;
             }
+            case opcode_t::CONS:
+            {
+                DEBUG_MSG("CONS");
+                validate_allocation(hp, heap_end, 2*WORD_BYTES);
+
+                // Grab CAR and CDR
+                uint64_t cdr = stk.pop();
+                uint64_t car = stk.pop();
+                
+                // Place onto heap
+                *hp = car;
+                *(hp + WORD_BYTES) = cdr;
+
+                // Put addr on stack and update heap ptr
+                uint64_t addr = (uint64_t) hp | PAIR_TAG;
+                hp += (2 * WORD_BYTES);
+                stk.push(addr);
+                break;
+            }
+            case opcode_t::CAR:
+            {
+                DEBUG_MSG("CAR");
+                uint64_t tagged_ptr = stk.pop_and_check_type(VT::PAIR);
+                strip_tag(tagged_ptr);
+                // Get addr of CAR and dereference
+                uint64_t* addr = (uint64_t*) tagged_ptr;
+                uint64_t value = *addr;
+                stk.push(value);
+                break;
+            }
+            case opcode_t::CDR:
+            {
+                DEBUG_MSG("CDR");
+                uint64_t tagged_ptr = stk.pop_and_check_type(VT::PAIR);
+                strip_tag(tagged_ptr);
+                // Get addr of CDR and dereference
+                uint64_t* addr = (uint64_t*) tagged_ptr + WORD_BYTES;
+                stk.push(*addr);
+                break;
+            }
             case opcode_t::RETURN:
             {
                 DEBUG_MSG("RETURN");
@@ -485,6 +577,11 @@ int main() {
             {
                 char c = resolve_char(result);
                 std::cout << c << std::endl;
+                break;
+            }
+            case VT::PAIR:
+            {
+                std::cout << "[INTERPRETER] Printer: Not handling cons blocks yet." << std::endl;
                 break;
             }
             default:

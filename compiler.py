@@ -42,6 +42,11 @@ class I(enum.IntEnum):
     JMP = enum.auto() # jump
     JIF = enum.auto() # jump if false
 
+    # Cons
+    CONS = enum.auto()
+    CAR = enum.auto()
+    CDR = enum.auto()
+
 # Container for shift/tagging information
 class SI:
     def __init__(self, mask, tag, shift):
@@ -84,12 +89,9 @@ def box_empty_list():
 def compiler_error(msg):
     raise SyntaxError(f"{LOG_TAG}: {msg}")
 
-def validate_args(expr, *args):
-    if len(args) != len(expr[1:]):
-        error_msg = f"Invalid usage of function '{expr[0]}' - Usage: ({expr[0]}"
-        for arg in args:
-            error_msg += " " + arg
-        error_msg += ")"
+def validate_args(expr, num_args):
+    if num_args != len(expr[1:]):
+        error_msg = f"Invalid usage of function '{expr[0]}' - {num_args} args expected."
         compiler_error(error_msg)
 
 class Compiler:
@@ -166,72 +168,87 @@ class Compiler:
                 match func_name:
                     # Unary functions
                     case "add1":
-                        validate_args(expr, "fixnum")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.ADD1)
                     case "sub1":
-                        validate_args(expr, "fixnum")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.SUB1)
                     case "integer->char":
-                        validate_args(expr, "fixnum")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.INT_TO_CHAR)
                     case "char->integer":
-                        validate_args(expr, "char")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.CHAR_TO_INT)
                     case "null?":
-                        validate_args(expr, "any")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.NULL_CHECK)
                     case "zero?":
-                        validate_args(expr, "fixnum")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.ZERO_CHECK)
                     case "not":
-                        validate_args(expr, "bool")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.NOT)
                     case "integer?":
-                        validate_args(expr, "any")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.INT_CHECK)
                     case "boolean?":
-                        validate_args(expr, "any")
+                        validate_args(expr, 1)
                         ops += self.compile(expr[1], environment)
                         emit(I.BOOL_CHECK)
 
+                    case "car":
+                        validate_args(expr, 1)
+                        ops += self.compile(expr[1], environment)
+                        emit(I.CAR)
+                    case "cdr":
+                        validate_args(expr, 1)
+                        ops += self.compile(expr[1], environment)
+                        emit(I.CDR)
+
                     # Binary functions
                     case "+":
-                        validate_args(expr, "fixnum", "fixnum")
+                        validate_args(expr, 2)
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.ADD)
                     case "-":
-                        validate_args(expr, "fixnum", "fixnum")
+                        validate_args(expr, 2)
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.SUB)
                     case "*":
-                        validate_args(expr, "fixnum", "fixnum")
+                        validate_args(expr, 2)
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.MUL)
                     case "<":
-                        validate_args(expr, "fixnum", "fixnum")
+                        validate_args(expr, 2)
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.LT)
                     case "=":
-                        validate_args(expr, "fixnum", "fixnum")
+                        validate_args(expr, 2)
                         ops += self.compile(expr[1], environment)
                         ops += self.compile(expr[2], self.update_indices(environment, 1))
                         emit(I.EQL)
 
+                    case "cons":
+                        validate_args(expr, 2)
+                        ops += self.compile(expr[1], environment)
+                        ops += self.compile(expr[2], self.update_indices(environment, 1))
+                        emit(I.CONS)
+
                     # Ternary functions
                     case "if":
-                        validate_args(expr, "bool", "any", "any")
+                        validate_args(expr, 3)
                         # -- If --
                         ops += self.compile(expr[1], environment)
 
