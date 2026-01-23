@@ -8,5 +8,8 @@ all: $(TARGET)
 $(TARGET): $(SRC)
 	$(CXX) $(FLAGS) $(SRC) -o $(TARGET)
 
+debug: $(SRC)
+	$(CXX) $(FLAGS) -DDEBUG $(SRC) -o $(TARGET)
+
 clean:
 	rm -f $(TARGET) code.txt compiled.bc

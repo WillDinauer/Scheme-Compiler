@@ -8,9 +8,8 @@
 #include <iomanip>
 
 // Debug flag and message
-#define DEBUG_ACTIVE
 
-#ifdef DEBUG_ACTIVE
+#ifdef DEBUG
     #define DEBUG_MSG(m) do {std::cout << m << std::endl;} while(0)
 #else
     #define DEBUG_MSG(m) do {} while(0)

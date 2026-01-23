@@ -19,7 +19,7 @@ compile() {
 # -- Run all the tests --
 if [[ "$1" == "tests" ]]; then
     TEMP=tests/temp.txt
-    for test_dir in tests/*; do
+    for test_dir in tests/good/*; do
         if [ -d "$test_dir" ]; then
             TEST=$(basename $test_dir)
             echo -n "Running test $TEST..."
@@ -46,6 +46,22 @@ if [[ "$1" == "tests" ]]; then
             rm "tests/temp.txt"
         fi
     done
+
+    for test in tests/bad/*; do
+        echo "Running bad test $test...here it is:"
+        cat $test
+        compile $test "tests/$COMPILED_FILE"
+
+        if [[ $? -ne 0 ]]; then
+            echo -e "${GREEN}PASSED.${NC} (but check the error...)"
+        else
+            echo -e "${RED}FAILED.${NC} (these tests should not compile...)"
+            rm "test/$COMPILED_FILE"
+            exit -1
+        fi
+    done
+    
+    echo -e "${GREEN}Passed ALL tests! (good and bad!)${NC}"
     exit 0
 fi
 

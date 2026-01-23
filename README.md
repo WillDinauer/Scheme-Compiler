@@ -1,5 +1,9 @@
 # Scheme-Compiler
 
+## Building
+
+The interpreter must be compiled. To build this interpreter, run `make`. To build the interpreter with debug information, run `make debug`. (Note: debug information must be disabled to run the tests). For a fresh build, run `make clean` beforehand.
+
 ## Usage
 
 For a particular scheme file:
@@ -12,11 +16,13 @@ For example,
 ```
 This script will parse and compile the Scheme file into `compiled.bc`, which is passed to the interpreter for running.
 
+## Testing
+
 To run all the tests, run:
 ```
 ./runner.sh tests
 ```
-This will test that every scheme file in the `tests/` directory builds AND produces expected ouput.
+This will test that every scheme file in the `tests/` directory builds AND produces expected ouput. There are both good and bad tests, each in their own repositories (`tests/good` and `tests/bad`).
 
 ## Parser and Compiler
 
@@ -30,8 +36,8 @@ The file `test.bc` then contains the bytecode (which can be run by the interpret
 
 To build the interpreter, run `make`. Running `make clean` will allow for a fresh build of the interpreter.
 
-The interpreter expects custom bytecode from stdin, as produced by the compiler. To enable debugging in the interpreter, uncomment the `#define DEBUG_ACTIVE` line for some tracing. It can be run independently such as:
+The interpreter expects custom bytecode from stdin, as produced by the compiler. It can be run independently such as:
 ```
 ./interpreter test.bc
 ```
-The result is printed to stdout by default (although this is not standard behavior in Scheme, but is useful for now).
+The result is printed to stdout by default.
