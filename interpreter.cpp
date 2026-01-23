@@ -18,7 +18,8 @@
 // # of bytes per word
 #define WORD_BYTES      8
 
-// Pointer resolution information
+// -- Pointer resolution information -- 
+// Primitives
 #define FIXNUM_MASK     3
 #define FIXNUM_TAG      0
 #define FIXNUM_SHIFT    2
@@ -32,13 +33,19 @@
 #define EL_TAG          47
 #define EL_SHIFT        0
 
+// Ptrs
 #define PTR_MASK        7
 #define PAIR_TAG        1
 #define VECTOR_TAG      2
 #define STRING_TAG      3
 #define SYMBOL_TAG      5
 #define CLOSURE_TAG     6
-#define LAST_3_BITS_0  -8
+
+// Tag stripping info
+#define FIXNUM_NUKE     -1
+#define CHAR_NUKE       -16
+#define BOOL_NUKE       -32
+#define PTR_NUKE        -8
 
 #define T_BOOL_VAL      1
 #define F_BOOL_VAL      0
@@ -97,8 +104,33 @@ enum opcode_t : uint8_t {
     CDR = 0x18,
 };
 
-uint64_t create_fixnum_ptr(uint64_t num) {
+int64_t create_fixnum_ptr(int64_t num) {
     return (num << FIXNUM_SHIFT) | FIXNUM_TAG;
+}
+
+std::string type_to_string(VT type) {
+    switch (type) {
+        case VT::FIXNUM:
+            return "FIXNUM";
+        case VT::CHAR:
+            return "CHAR";
+        case VT::BOOL:
+            return "BOOL";
+        case VT::EMPTY_LIST:
+            return "NIL";
+        case VT::PAIR:
+            return "CONS";
+        case VT::STRING:
+            return "STRING";
+        case VT::VECTOR:
+            return "VECTOR";
+        case VT::SYMBOL:
+            return "SYMBOL";
+        case VT::CLOSURE:
+            return "CLOSURE";
+        case VT::UNKNOWN:
+            return "UNKNOWN";
+    }
 }
 
 // Figure out the type based on the tag information
@@ -138,55 +170,6 @@ void type_check_or_fail(uint64_t value, VT desired_type) {
     }
 }
 
-void validate_allocation(uint64_t* hp, uint64_t* heap_end, uint64_t size) {
-    if (hp + size > heap_end) {
-        throw std::runtime_error("Ran out of heap space.");
-    }
-}
-
-// Zero out tag for a given pointer
-void strip_tag(uint64_t& value) {
-    uint64_t shift;
-    switch (resolve_type(value)) {
-        case VT::FIXNUM:
-        {
-            shift = FIXNUM_SHIFT;
-            break;
-        }
-        case VT::BOOL:
-        {
-            shift = BOOL_SHIFT;
-            break;
-        }
-        case VT::CHAR:
-        {
-            shift = CHAR_SHIFT;
-            break;
-        }
-        case VT::PAIR:
-        case VT::VECTOR:
-        case VT::STRING:
-        case VT::SYMBOL:
-        case VT::CLOSURE:
-        {
-            value &= LAST_3_BITS_0;
-            return;
-        }
-        default:
-        {
-            throw std::runtime_error("trying to strip unstrippable obj");
-        }
-    }
-    // Zero out tag bits by shifting
-    value = (value >> shift) << shift;
-}
-
-// Get the value by shifting right the appropriate amount
-uint64_t get_fixnum_value(uint64_t value) {
-    type_check_or_fail(value, VT::FIXNUM);
-    return value >> FIXNUM_SHIFT;
-}
-
 // Convert uint64_t representation of boolean to c++ true/false
 bool resolve_bool(uint64_t value) {
     type_check_or_fail(value, VT::BOOL);
@@ -196,6 +179,78 @@ bool resolve_bool(uint64_t value) {
 char resolve_char(uint64_t value) {
     type_check_or_fail(value, VT::CHAR);
     return static_cast<char>(value >> CHAR_SHIFT);
+}
+
+// Get the value by shifting right the appropriate amount
+int64_t resolve_fixnum(int64_t value) {
+    type_check_or_fail(value, VT::FIXNUM);
+    return value >> FIXNUM_SHIFT;
+}
+
+// Convert value to [VALUE - resolved_value] pair
+std::string value_to_string(uint64_t value) {
+    VT type = resolve_type(value);
+    std::string res = "[" + type_to_string(type) + ": ";
+
+    std::string v_string;
+    switch (type) {
+        case VT::FIXNUM:
+            v_string = std::to_string(resolve_fixnum(value));
+            break;
+        case VT::CHAR:
+            v_string = std::to_string(resolve_char(value));
+            break;
+        case VT::BOOL:
+            v_string = std::to_string(resolve_bool(value));
+            break;
+        default:
+            v_string = std::to_string(value);
+    }
+    res += v_string + "]";
+    return res;
+}
+
+void validate_allocation(uint64_t* hp, uint64_t* heap_end, uint64_t size) {
+    if (hp + size > heap_end) {
+        throw std::runtime_error("Ran out of heap space.");
+    }
+}
+
+// Zero out tag for a given pointer
+void strip_tag(uint64_t& value) {
+    uint64_t nuker;     // Nuke the tag
+    switch (resolve_type(value)) {
+        case VT::FIXNUM:
+        {
+            nuker = FIXNUM_NUKE;
+            break;
+        }
+        case VT::BOOL:
+        {
+            nuker = BOOL_NUKE;
+            break;
+        }
+        case VT::CHAR:
+        {
+            nuker = CHAR_NUKE;
+            break;
+        }
+        case VT::PAIR:
+        case VT::VECTOR:
+        case VT::STRING:
+        case VT::SYMBOL:
+        case VT::CLOSURE:
+        {
+            nuker = PTR_NUKE;
+            break;
+        }
+        default:
+        {
+            throw std::runtime_error("trying to strip unstrippable obj");
+        }
+    }
+    // Zero out tag bits
+    value &= nuker;
 }
 
 // Convert true/false to #t or #f, respectively
@@ -239,11 +294,11 @@ public:
     }
 
     void print_state() {
-        std::cout << "[ ";
+        std::cout << "STACK: { ";
         for (uint64_t v: s) {
-            std::cout << v << " ";
+            std::cout << value_to_string(v) << " ";
         }
-        std::cout << "]" << std::endl;
+        std::cout << "}" << std::endl;
     }
 };
 
@@ -272,8 +327,8 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
     uint64_t* heap_end = hp + 1024;
 
     while (pc < code.size()) {
-        DEBUG_MSG(std::format("pc: {}", pc));
-        #ifdef DEBUG_ACTIVE
+        DEBUG_MSG(std::format("\npc: {}", pc));
+        #ifdef DEBUG
             stk.print_state();
         #endif
         // truncate instr to lowest byte
@@ -289,7 +344,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::ADD1:
             {
                 DEBUG_MSG("ADD1");
-                uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 value += (1 << FIXNUM_SHIFT);
                 stk.push(value);
@@ -298,7 +353,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::SUB1:
             {
                 DEBUG_MSG("SUB1");
-                uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 value -= (1 << FIXNUM_SHIFT);
                 stk.push(value);
@@ -307,7 +362,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::INT_TO_CHAR:
             {
                 DEBUG_MSG("INT_TO_CHAR");
-                uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 value = value >> FIXNUM_SHIFT;  // Remove fixnum tag
                 value = value << CHAR_SHIFT;    // Make space for char tag
@@ -320,9 +375,9 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 DEBUG_MSG("CHAR_TO_INT");
                 uint64_t value = stk.pop_and_check_type(VT::CHAR);
 
-                value = value >> CHAR_SHIFT;    // Remove char tag
-                value = value << FIXNUM_SHIFT;  // Make space for fixnum tag
-                value |= FIXNUM_TAG;            // Add fixnum tag
+                value = value >> CHAR_SHIFT;                // Remove char tag
+                value = (int64_t) value << FIXNUM_SHIFT;    // Make space for fixnum tag
+                value |= FIXNUM_TAG;                        // Add fixnum tag
                 stk.push(value);
                 break;
             }
@@ -337,8 +392,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::ZERO_CHECK:
             {
                 DEBUG_MSG("ZERO_CHECK");
-                uint64_t value = stk.pop();
-                type_check_or_fail(value, VT::FIXNUM);
+                uint64_t value = stk.pop_and_check_type(VT::FIXNUM);
 
                 uint64_t zero = FIXNUM_TAG;
                 value == zero ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
@@ -374,13 +428,13 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
                 uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
 
-                // Remove tag
+                // Remove tags
                 strip_tag(v1);
+                strip_tag(v2);
 
                 // Add and push
-                v2 += v1;
-
-                stk.push(v2);
+                uint64_t result = ((int64_t) v1 + (int64_t) v2) | FIXNUM_TAG;
+                stk.push(result);
                 break;
             }
             case opcode_t::SUB:
@@ -391,23 +445,26 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
 
                 // Remove tag
                 strip_tag(v1);
+                strip_tag(v2);
 
                 // Sub and push
-                v2 -= v1;
-                stk.push(v2);
+                uint64_t result = ((int64_t) v2 - (int64_t) v1) | FIXNUM_TAG;
+                stk.push(result);
                 break;
             }
             case opcode_t::MUL:
             {
                 DEBUG_MSG("MUL");
-                uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
-                uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
 
-                v1 = get_fixnum_value(v1);
-                v2 = get_fixnum_value(v2);
+                // Get actual values
+                v1 = resolve_fixnum(v1);
+                v2 = resolve_fixnum(v2);
+                
+                // Multiply and push
                 v1 *= v2;
-                uint64_t res = create_fixnum_ptr(v1);
-                stk.push(res);
+                stk.push(create_fixnum_ptr(v1));
                 break;
             }
             case opcode_t::LT:
@@ -434,7 +491,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 uint64_t value = read_word(pc, code);
 
                 // Value becomes an index to reach into on the stack
-                value = get_fixnum_value(value);
+                value = resolve_fixnum(value);
                 #ifdef DEBUG_ACTIVE
                     std::cout << "Get Index: " << value << std::endl;
                 #endif
@@ -464,7 +521,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 DEBUG_MSG("JMP");
                 uint64_t jump_length = read_word(pc, code);
                 type_check_or_fail(jump_length, VT::FIXNUM);
-                pc += get_fixnum_value(jump_length);
+                pc += resolve_fixnum(jump_length);
                 break;
             }
             case opcode_t::JIF:
@@ -476,7 +533,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 if (type == VT::BOOL && !resolve_bool(value)) {
                     DEBUG_MSG("JUMP IN JIF...(condition == '#f')");
                     type_check_or_fail(jump_length, VT::FIXNUM);
-                    pc += get_fixnum_value(jump_length);
+                    pc += resolve_fixnum(jump_length);
                 }
                 break;
             }
@@ -563,7 +620,7 @@ int main() {
         switch(type) {
             case VT::FIXNUM:
             {
-                std::cout << (result >> FIXNUM_SHIFT) << std::endl;
+                std::cout << ((int64_t) result >> FIXNUM_SHIFT) << std::endl;
                 break;
             }
             case VT::BOOL:

@@ -7,6 +7,13 @@ class Character:
     def get_char(self):
         return self.c
 
+# Strings are just an array of characters
+class String:
+    def __init__(self, string: str):
+        self.char_array = []
+        for i in range(len(string)):
+            self.char_array.append(Character(string[i]))
+
 class Parser:
     def __init__(self, source: str):
         self.source = source
@@ -42,6 +49,9 @@ class Parser:
         self.pos += 1
         if self.finished():
             raise err
+        
+    def is_delim(self, c):
+        return c.isspace() or c == ')' or c == '('
     
     # Look for a '|#' block. When the function is called, we assumed pos is at the '|' of the '#|' entry.
     # After this function concludes, pos will be placed AFTER the ending of the block '|#'.
@@ -108,6 +118,7 @@ class Parser:
     
     def parse_special(self):
         self.pos += 1
+
         match self.peek():
             case '':
                 raise EOFError("Unexpected end of input")
@@ -129,11 +140,18 @@ class Parser:
             return Character(val)
         
         # Special characters
-        raise NotImplementedError(f"Special characters not currently supported. Found '#\{val}'")
+        match val:
+            case "space":
+                return Character(' ')
+            case "newline":
+                return Character('\n')
+            case "tab":
+                return Character('\t')
+        raise NotImplementedError(f"Invalid or unsupported character. Found '#\{val}'")
 
     def parse_string(self) -> str:
         start = self.pos
-        while self.pos < self.length and self.peek().isascii() and not self.peek().isspace() and not self.peek() == ')':
+        while self.pos < self.length and self.peek().isascii() and not self.is_delim(self.peek()):
             self.pos += 1
         return self.source[start:self.pos]
     
