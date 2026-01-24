@@ -1,6 +1,6 @@
 import enum
 import sys
-from parser import Character, scheme_parse
+from parser import scheme_parse, Character, String
 
 LOG_TAG = "[COMPILER]"
 
@@ -9,6 +9,7 @@ SYSTEM_TYPE =   64
 OP_LEN =        8
 T_BOOL_VAL =    1
 F_BOOL_VAL =    0
+BYTE_LEN =      8
 
 # Opcodes
 class I(enum.IntEnum):
@@ -46,6 +47,9 @@ class I(enum.IntEnum):
     CONS = enum.auto()
     CAR = enum.auto()
     CDR = enum.auto()
+
+    # String
+    ALLOC_STR = enum.auto()
 
 # Container for shift/tagging information
 class SI:
@@ -151,7 +155,26 @@ class Compiler:
                 emit(box_fixnum(expr))
             case Character():           # Char
                 emit(I.LOAD64)
-                emit(box_char(expr.get_char()))
+                emit(box_char(expr.to_string()))
+            case String():
+                char_arr = expr.get_characters()
+                length = len(char_arr)
+
+                emit(I.ALLOC_STR)
+                emit(box_fixnum(length))
+                
+                # Emit word-length chunks of the string
+                i = 0
+                while i < length:
+                    cur = 0
+                    # Iterate over character array
+                    for i in range(i + OP_LEN - 1, i - 1, -1):
+                        cur <<= BYTE_LEN
+                        if i < length:
+                            cur |= ord(char_arr[i].get_char())
+                    emit(cur)
+                    i += OP_LEN
+
             case list():
                 # Empty list
                 if len(expr) == 0:

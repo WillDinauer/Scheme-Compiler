@@ -4,13 +4,19 @@ class Character:
     def __init__(self, c: str):
         self.c = c
 
-    def to_string(self):
+    def get_char(self):
         return self.c
+
+    def to_string(self):
+        return self.get_char()
 
 # Strings are just an array of characters
 class String:
     def __init__(self, char_array):
         self.char_array = char_array
+
+    def get_characters(self):
+        return self.char_array
     
     def to_string(self):
         result = ""
@@ -216,7 +222,6 @@ def scheme_parse(source: str) -> object:
 
 class ParseTests(unittest.TestCase):
     def _parse(self, source: str) -> object:
-        print(source)
         return Parser(source).parse()
 
     def test_parse_fixnum(self):

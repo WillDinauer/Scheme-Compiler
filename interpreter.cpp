@@ -16,7 +16,7 @@
 #endif
 
 // # of bytes per word
-#define WORD_BYTES      8
+#define WORD_LEN      8
 
 // -- Pointer resolution information -- 
 // Primitives
@@ -102,6 +102,9 @@ enum opcode_t : uint8_t {
     CONS = 0x16,
     CAR = 0x17,
     CDR = 0x18,
+
+    // String
+    ALLOC_STR = 0x19,
 };
 
 int64_t create_fixnum_ptr(int64_t num) {
@@ -162,60 +165,6 @@ VT resolve_type(uint64_t value) {
     throw std::runtime_error(std::format("Unable to resolve type for value: {}", value));
 }
 
-// Check if value matches expected type. Throw an error if not
-void type_check_or_fail(uint64_t value, VT desired_type) {
-    VT type = resolve_type(value);
-    if (type != desired_type) {
-        throw std::runtime_error("Type check failed."); // This is a non-descript error message and should be fixed...
-    }
-}
-
-// Convert uint64_t representation of boolean to c++ true/false
-bool resolve_bool(uint64_t value) {
-    type_check_or_fail(value, VT::BOOL);
-    return (value >> BOOL_SHIFT) == T_BOOL_VAL;
-}
-
-char resolve_char(uint64_t value) {
-    type_check_or_fail(value, VT::CHAR);
-    return static_cast<char>(value >> CHAR_SHIFT);
-}
-
-// Get the value by shifting right the appropriate amount
-int64_t resolve_fixnum(int64_t value) {
-    type_check_or_fail(value, VT::FIXNUM);
-    return value >> FIXNUM_SHIFT;
-}
-
-// Convert value to [VALUE - resolved_value] pair
-std::string value_to_string(uint64_t value) {
-    VT type = resolve_type(value);
-    std::string res = "[" + type_to_string(type) + ": ";
-
-    std::string v_string;
-    switch (type) {
-        case VT::FIXNUM:
-            v_string = std::to_string(resolve_fixnum(value));
-            break;
-        case VT::CHAR:
-            v_string = std::to_string(resolve_char(value));
-            break;
-        case VT::BOOL:
-            v_string = std::to_string(resolve_bool(value));
-            break;
-        default:
-            v_string = std::to_string(value);
-    }
-    res += v_string + "]";
-    return res;
-}
-
-void validate_allocation(uint64_t* hp, uint64_t* heap_end, uint64_t size) {
-    if (hp + size > heap_end) {
-        throw std::runtime_error("Ran out of heap space.");
-    }
-}
-
 // Zero out tag for a given pointer
 void strip_tag(uint64_t& value) {
     uint64_t nuker;     // Nuke the tag
@@ -253,9 +202,90 @@ void strip_tag(uint64_t& value) {
     value &= nuker;
 }
 
+// Check if value matches expected type. Throw an error if not
+void type_check_or_fail(uint64_t value, VT desired_type) {
+    VT type = resolve_type(value);
+    if (type != desired_type) {
+        throw std::runtime_error("Type check failed."); // This is a non-descript error message and should be fixed...
+    }
+}
+
+// Convert uint64_t representation of boolean to c++ true/false
+bool resolve_bool(uint64_t value) {
+    type_check_or_fail(value, VT::BOOL);
+    return (value >> BOOL_SHIFT) == T_BOOL_VAL;
+}
+
+char resolve_char(uint64_t value) {
+    type_check_or_fail(value, VT::CHAR);
+    return static_cast<char>(value >> CHAR_SHIFT);
+}
+
+// Get the value by shifting right the appropriate amount
+int64_t resolve_fixnum(int64_t value) {
+    type_check_or_fail(value, VT::FIXNUM);
+    return value >> FIXNUM_SHIFT;
+}
+
+
+std::string resolve_string(uint64_t value) {
+    type_check_or_fail(value, VT::STRING);
+    strip_tag(value);
+    uint64_t* ptr = (uint64_t *) value;
+
+    // Read length
+    uint64_t length = resolve_fixnum(*ptr);
+    ptr += WORD_LEN;
+
+    // Read characters
+    char* char_ptr = (char *) ptr;
+    std::string res;
+    for (uint64_t i = 0; i < length; i++) {
+        res += *(char_ptr++);
+    }
+    return res;
+}
+
 // Convert true/false to #t or #f, respectively
 std::string cpp_bool_to_scheme_bool(bool value) {
     return value ? "#t" : "#f";
+}
+
+void validate_allocation(uint64_t* heap_ptr, uint64_t* heap_end, uint64_t size) {
+    if (heap_ptr + size > heap_end) {
+        throw std::runtime_error("Ran out of heap space.");
+    }
+}
+
+// Convert value to [VALUE - resolved_value] pair
+std::string value_to_string(uint64_t value, bool include_type=false) {
+    VT type = resolve_type(value);
+    std::string res = "[" + type_to_string(type) + ": ";
+
+    std::string v_string;
+    switch (type) {
+        case VT::FIXNUM:
+            v_string = std::to_string(resolve_fixnum(value));
+            break;
+        case VT::CHAR:
+            v_string = std::to_string(resolve_char(value));
+            break;
+        case VT::BOOL:
+            v_string = cpp_bool_to_scheme_bool(resolve_bool((value)));
+            break;
+        case VT::STRING:
+            v_string = resolve_string(value);
+            break;
+        default:
+            v_string = std::to_string(value);
+    }
+    // Value only
+    if (!include_type) {
+        return v_string;
+    }
+
+    res += v_string + "]";
+    return res;
 }
 
 // 8-byte stack values
@@ -296,7 +326,7 @@ public:
     void print_state() {
         std::cout << "STACK: { ";
         for (uint64_t v: s) {
-            std::cout << value_to_string(v) << " ";
+            std::cout << value_to_string(v, true) << " ";
         }
         std::cout << "}" << std::endl;
     }
@@ -308,7 +338,7 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
     uint64_t ret = 0;
 
     // Read in bytes 1 at a time, little-endian
-    for (int i = 0; i < WORD_BYTES; i++) {
+    for (int i = 0; i < WORD_LEN; i++) {
         uint64_t b = (uint64_t)code[pc] << (i * bits_per_byte);
         ret |= b;
         pc++;
@@ -317,14 +347,21 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
     return ret;
 }
 
+// Write a word to the heap
+void heap_write_word(uint64_t** heap_ptr_ref, uint64_t* heap_end, uint64_t value) {
+    validate_allocation(*heap_ptr_ref, heap_end, WORD_LEN);
+    **heap_ptr_ref = value;
+    *heap_ptr_ref += WORD_LEN;
+}
+
 // Run the code
 std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
     v_stack stk;
 
     static uint64_t heap[1024];
-    uint64_t* hp = heap;
-    uint64_t* heap_end = hp + 1024;
+    uint64_t* heap_ptr = heap;
+    uint64_t* heap_end = heap_ptr + 1024;
 
     while (pc < code.size()) {
         DEBUG_MSG(std::format("\npc: {}", pc));
@@ -433,8 +470,9 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 strip_tag(v2);
 
                 // Add and push
-                uint64_t result = ((int64_t) v1 + (int64_t) v2) | FIXNUM_TAG;
-                stk.push(result);
+                v2 += v1;
+                v2 |= FIXNUM_TAG;
+                stk.push(v2);
                 break;
             }
             case opcode_t::SUB:
@@ -448,8 +486,9 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 strip_tag(v2);
 
                 // Sub and push
-                uint64_t result = ((int64_t) v2 - (int64_t) v1) | FIXNUM_TAG;
-                stk.push(result);
+                v2 -= v1;
+                v2 |= FIXNUM_TAG;
+                stk.push(v2);
                 break;
             }
             case opcode_t::MUL:
@@ -470,8 +509,8 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::LT:
             {
                 DEBUG_MSG("LT");
-                uint64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
-                uint64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t v1 = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t v2 = stk.pop_and_check_type(VT::FIXNUM);
                 
                 v2 < v1 ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
                 break;
@@ -540,19 +579,18 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::CONS:
             {
                 DEBUG_MSG("CONS");
-                validate_allocation(hp, heap_end, 2*WORD_BYTES);
+                validate_allocation(heap_ptr, heap_end, 2*WORD_LEN);
 
                 // Grab CAR and CDR
                 uint64_t cdr = stk.pop();
                 uint64_t car = stk.pop();
                 
-                // Place onto heap
-                *hp = car;
-                *(hp + WORD_BYTES) = cdr;
+                // Address to put on stack
+                uint64_t addr = (uint64_t) heap_ptr | PAIR_TAG;
 
-                // Put addr on stack and update heap ptr
-                uint64_t addr = (uint64_t) hp | PAIR_TAG;
-                hp += (2 * WORD_BYTES);
+                // Place onto heap, then push addr
+                heap_write_word(&heap_ptr, heap_end, car);
+                heap_write_word(&heap_ptr, heap_end, cdr);
                 stk.push(addr);
                 break;
             }
@@ -573,7 +611,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 uint64_t tagged_ptr = stk.pop_and_check_type(VT::PAIR);
                 strip_tag(tagged_ptr);
                 // Get addr of CDR and dereference
-                uint64_t* addr = (uint64_t*) tagged_ptr + WORD_BYTES;
+                uint64_t* addr = (uint64_t*) tagged_ptr + WORD_LEN;
                 stk.push(*addr);
                 break;
             }
@@ -585,6 +623,31 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 }
                 uint64_t value = stk.pop();
                 return std::make_unique<uint64_t>(value);
+            }
+            case opcode_t::ALLOC_STR:
+            {
+                DEBUG_MSG("ALLOC_STR");
+                uint64_t length = read_word(pc, code);
+                type_check_or_fail(length, VT::FIXNUM);
+
+                // (+ 1) for length entry
+                validate_allocation(heap_ptr, heap_end, (length + 1) * WORD_LEN);
+
+                // Save the current location of the heap ptr as the value to push
+                uint64_t ptr = (uint64_t) heap_ptr | STRING_TAG;
+
+                // Write length to the heap
+                heap_write_word(&heap_ptr, heap_end, length);
+                
+                // Read 'length' # of chars and place them on the heap
+                for (int i = 0; i < resolve_fixnum(length); i += WORD_LEN) {
+                    uint64_t value = read_word(pc, code);
+
+                    heap_write_word(&heap_ptr, heap_end, value);
+                }
+
+                stk.push(ptr);
+                break;
             }
             default:
             {
@@ -615,36 +678,8 @@ int main() {
 
     // Validate the ptr
     if (result_ptr) {
-        uint64_t result = *result_ptr;
-        VT type = resolve_type(result);
-        switch(type) {
-            case VT::FIXNUM:
-            {
-                std::cout << ((int64_t) result >> FIXNUM_SHIFT) << std::endl;
-                break;
-            }
-            case VT::BOOL:
-            {
-                bool truth_val = resolve_bool(result);
-                std::cout << cpp_bool_to_scheme_bool(truth_val) << std::endl;
-                break;
-            }
-            case VT::CHAR:
-            {
-                char c = resolve_char(result);
-                std::cout << c << std::endl;
-                break;
-            }
-            case VT::PAIR:
-            {
-                std::cout << "[INTERPRETER] Printer: Not handling cons blocks yet." << std::endl;
-                break;
-            }
-            default:
-            {
-                throw std::runtime_error(std::format("Unknown type returned! Raw value: {}", result));
-            }
-        }
-        return 0;
+        std::cout << value_to_string(*result_ptr) << std::endl;
     }
+
+    return 0;
 }
