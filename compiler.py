@@ -54,6 +54,12 @@ class I(enum.IntEnum):
     STR_SET = enum.auto()
     STR_APPEND = enum.auto()
 
+    # Vector
+    ALLOC_VEC = enum.auto()
+    VEC_REF = enum.auto()
+    VEC_SET = enum.auto()
+    VEC_APPEND = enum.auto()
+
 # Container for shift/tagging information
 class SI:
     def __init__(self, mask, tag, shift):
@@ -143,22 +149,36 @@ class Compiler:
             new_environment[local] += shift
         return new_environment
     
-    def compile_string(self, char_arr, environment):
+    def compile_list(self, elements, opcode, environment):
         ops = []
-        length = len(char_arr)
 
-        # Compile all characters (in reverse order, for stack purposes)
-        for i in range(len(char_arr) - 1, -1, -1):
-            c = char_arr[i]
-            ops += self.compile(c, self.update_indices(environment, len(char_arr) - 1 - i))
+        # Traverse over args in reverse order (to pop them in order)
+        for i in range(len(elements) - 1, -1, -1):
+            el = elements[i]
+            ops += self.compile(el, self.update_indices(environment, len(elements) - 1 - i))
 
-        # Consume the characters on the stack to create a string
-        ops.append(I.ALLOC_STR)
-        ops.append(box_fixnum(length))
-
+        # Add particular opcode for this operation
+        ops.append(opcode)
+        ops.append(box_fixnum(len(elements)))
         return ops
-        
+    
+    def compile_vector(self, elements, environment):
+        return self.compile_list(elements, I.ALLOC_VEC, environment)
+    
+    def compile_string(self, char_arr, environment):
+        return self.compile_list(char_arr, I.ALLOC_STR, environment)
+    
+    def general_fn_emit(self, expr, n_args, opcode, environment):
+        ops = []
+        validate_args(expr, n_args)
+        # Compile args
+        for i, sub_expr in enumerate(expr[1:]):
+            ops += self.compile(sub_expr, self.update_indices(environment, i))
+        # Add specific opcode
+        ops += opcode
+        return ops
 
+        
     def compile(self, expr, environment) -> list:
         ops = []
         emit = ops.append
@@ -194,83 +214,43 @@ class Compiler:
                 match func_name:
                     # Unary functions
                     case "add1":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.ADD1)
+                        ops += self.general_fn_emit(expr, 1, I.ADD1, environment)
                     case "sub1":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.SUB1)
+                        ops += self.general_fn_emit(expr, 1, I.SUB1, environment)
                     case "integer->char":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.INT_TO_CHAR)
+                        ops += self.general_fn_emit(expr, 1, I.INT_TO_CHAR, environment)
                     case "char->integer":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.CHAR_TO_INT)
+                        ops += self.general_fn_emit(expr, 1, I.CHAR_TO_INT, environment)
                     case "null?":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.NULL_CHECK)
+                        ops += self.general_fn_emit(expr, 1, I.NULL_CHECK, environment)
                     case "zero?":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.ZERO_CHECK)
+                        ops += self.general_fn_emit(expr, 1, I.ZERO_CHECK, environment)
                     case "not":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.NOT)
+                        ops += self.general_fn_emit(expr, 1, I.NOT, environment)
                     case "integer?":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.INT_CHECK)
+                        ops += self.general_fn_emit(expr, 1, I.INT_CHECK, environment)
                     case "boolean?":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.BOOL_CHECK)
+                        ops += self.general_fn_emit(expr, 1, I.BOOL_CHECK, environment)
 
+                    # Pair functions
                     case "car":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.CAR)
+                        ops += self.general_fn_emit(expr, 1, I.CAR, environment)
                     case "cdr":
-                        validate_args(expr, 1)
-                        ops += self.compile(expr[1], environment)
-                        emit(I.CDR)
+                        ops += self.general_fn_emit(expr, 1, I.CDR, environment)
+                    case "cons":
+                        ops += self.general_fn_emit(expr, 2, I.CONS, environment)
 
                     # Binary functions
                     case "+":
-                        validate_args(expr, 2)
-                        ops += self.compile(expr[1], environment)
-                        ops += self.compile(expr[2], self.update_indices(environment, 1))
-                        emit(I.ADD)
+                        ops += self.general_fn_emit(expr, 2, I.ADD, environment)
                     case "-":
-                        validate_args(expr, 2)
-                        ops += self.compile(expr[1], environment)
-                        ops += self.compile(expr[2], self.update_indices(environment, 1))
-                        emit(I.SUB)
+                        ops += self.general_fn_emit(expr, 2, I.SUB, environment)
                     case "*":
-                        validate_args(expr, 2)
-                        ops += self.compile(expr[1], environment)
-                        ops += self.compile(expr[2], self.update_indices(environment, 1))
-                        emit(I.MUL)
+                        ops += self.general_fn_emit(expr, 2, I.MUL, environment)
                     case "<":
-                        validate_args(expr, 2)
-                        ops += self.compile(expr[1], environment)
-                        ops += self.compile(expr[2], self.update_indices(environment, 1))
-                        emit(I.LT)
+                        ops += self.general_fn_emit(expr, 2, I.LT, environment)
                     case "=":
-                        validate_args(expr, 2)
-                        ops += self.compile(expr[1], environment)
-                        ops += self.compile(expr[2], self.update_indices(environment, 1))
-                        emit(I.EQL)
-
-                    case "cons":
-                        validate_args(expr, 2)
-                        ops += self.compile(expr[1], environment)
-                        ops += self.compile(expr[2], self.update_indices(environment, 1))
-                        emit(I.CONS)
+                        ops += self.general_fn_emit(expr, 2, I.EQL, environment)
 
                     # Ternary functions
                     case "if":
@@ -323,24 +303,22 @@ class Compiler:
                     case "string":
                         ops += self.compile_string(expr[1:], environment)
                     case "string-ref":
-                        validate_args(expr, 2)
-                        ops += self.compile(expr[1], environment)
-                        ops += self.compile(expr[2], self.update_indices(environment, 1))
-                        emit(I.STR_REF)
+                        ops += self.general_fn_emit(expr, 2, I.STR_REF, environment)
                     case "string-set!":
-                        validate_args(expr, 3)
-                        ops += self.compile(expr[1], environment)
-                        ops += self.compile(expr[2], self.update_indices(environment, 1))
-                        ops += self.compile(expr[3], self.update_indices(environment, 2))
-                        emit(I.STR_SET)
+                        ops += self.general_fn_emit(expr, 3, I.STR_SET, environment)
                     case "string-append":
-                        strs = expr[1:]
-                        for i in range(len(strs) - 1, -1, -1):
-                            s = strs[i]
-                            ops += self.compile(s, self.update_indices(environment, i))
-                        emit(I.STR_APPEND)
-                        emit(box_fixnum(len(strs)))
-                        
+                        ops += self.compile_list(expr[1:], I.STR_APPEND, environment)
+
+                    # Vector functions
+                    case "vector":
+                        ops += self.compile_vector(expr[1:], environment)
+                    case "vector-ref":
+                        ops += self.general_fn_emit(expr, 2, I.VEC_REF, environment)
+                    case "vector-set!":
+                        ops += self.general_fn_emit(expr, 3, I.VEC_SET, environment)
+                    case "vector-append":
+                        ops += self.compile_list(expr[1:], I.VEC_APPEND, environment)
+
 
                     case _:
                         compiler_error(f"Calling unbound/undefined '{func_name}' as a function.")

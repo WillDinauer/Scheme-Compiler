@@ -6,116 +6,12 @@
 #include <stdexcept>
 #include <format>
 #include <iomanip>
-
-// Debug flag and message
-
-#ifdef DEBUG
-    #define DEBUG_MSG(m) do {std::cout << m << std::endl;} while(0)
-#else
-    #define DEBUG_MSG(m) do {} while(0)
-#endif
-
-// # of bytes per word
-#define WORD_LEN      8
-
-// -- Pointer resolution information -- 
-// Primitives
-#define FIXNUM_MASK     3
-#define FIXNUM_TAG      0
-#define FIXNUM_SHIFT    2
-#define CHAR_MASK       255
-#define CHAR_TAG        15
-#define CHAR_SHIFT      8
-#define BOOL_MASK       127
-#define BOOL_TAG        31
-#define BOOL_SHIFT      7
-#define EL_MASK         255
-#define EL_TAG          47
-#define EL_SHIFT        0
-#define UNSPEC_VAL      -1
-
-// Ptrs
-#define PTR_MASK        7
-#define PAIR_TAG        1
-#define VECTOR_TAG      2
-#define STRING_TAG      3
-#define SYMBOL_TAG      5
-#define CLOSURE_TAG     6
-
-// Tag stripping info
-#define FIXNUM_NUKE     -1
-#define CHAR_NUKE       -16
-#define BOOL_NUKE       -32
-#define PTR_NUKE        -8
-
-#define T_BOOL_VAL      1
-#define F_BOOL_VAL      0
-#define TRUE_BOOL       ((T_BOOL_VAL) << BOOL_SHIFT | BOOL_TAG)
-#define FALSE_BOOL      ((F_BOOL_VAL) << BOOL_SHIFT | BOOL_TAG)
+#include "interpreter.h"
 
 // Heap
 uint64_t heap[1024];
 uint64_t* heap_ptr = heap;
 uint64_t* heap_end = heap_ptr + 1024;
-
-// Value Type
-enum VT {
-    FIXNUM,
-    BOOL,
-    CHAR,
-    EMPTY_LIST,
-    PAIR,
-    VECTOR,
-    STRING,
-    SYMBOL,
-    CLOSURE,
-    UNSPECIFIED,
-    UNKNOWN
-};
-
-// 1 byte opcodes
-enum opcode_t : uint8_t {
-    LOAD64 = 0x01,
-    RETURN = 0x02,
-
-    // Unary functions
-    ADD1 = 0x03,
-    SUB1 = 0x04,
-    INT_TO_CHAR = 0x05,
-    CHAR_TO_INT = 0x06,
-    NULL_CHECK = 0x07,
-    ZERO_CHECK = 0x08,
-    INT_CHECK = 0x09,
-    BOOL_CHECK = 0x0A,
-    NOT = 0x0B,
-
-    // Binary functions
-    ADD = 0x0C,
-    SUB = 0x0D,
-    MUL = 0x0E,
-    LT = 0x0F,
-    EQL = 0x10,
-
-    // For local variables
-    GET = 0x11,
-    DROP = 0x12,
-    SQUASH = 0x13,
-
-    // Conditionals
-    JMP = 0x14,
-    JIF = 0x15,
-
-    // Cons
-    CONS = 0x16,
-    CAR = 0x17,
-    CDR = 0x18,
-
-    // String
-    ALLOC_STR = 0x19,
-    STR_REF = 0x1A,
-    STR_SET = 0x1B,
-    STR_APPEND = 0x1C,
-};
 
 int64_t create_fixnum_ptr(int64_t num) {
     return (num << FIXNUM_SHIFT) | FIXNUM_TAG;
@@ -252,15 +148,39 @@ std::string resolve_string(uint64_t value) {
     uint64_t* ptr = (uint64_t *) value;
 
     // Read length
-    uint64_t length = resolve_fixnum(*ptr);
+    int64_t length = resolve_fixnum(*ptr);
     ptr += WORD_LEN;
 
     // Read characters
     char* char_ptr = (char *) ptr;
     std::string res;
-    for (uint64_t i = 0; i < length; i++) {
+    for (int64_t i = 0; i < length; i++) {
         res += *(char_ptr++);
     }
+    return res;
+}
+
+std::string vector_to_string(uint64_t value) {
+    // Get ptr to vector
+    type_check_or_fail(value, VT::VECTOR);
+    strip_tag(value);
+    uint64_t* vec_ptr = (uint64_t *) value;
+
+    // Get vector length
+    int64_t length = resolve_fixnum(*vec_ptr);
+    vec_ptr += WORD_LEN;
+
+    // Recurse over vector elements
+    std::string res = "#(";
+    for (int64_t i = 0; i < length; i++) {
+        // Spaces between elements
+        if (i != 0) {
+            res += " ";
+        }
+        res += value_to_string(*vec_ptr);
+        vec_ptr += WORD_LEN;
+    }
+    res += ")";
     return res;
 }
 
@@ -276,7 +196,7 @@ void validate_allocation(uint64_t size) {
 }
 
 // Convert value to [VALUE - resolved_value] pair
-std::string value_to_string(uint64_t value, bool include_type=false) {
+std::string value_to_string(uint64_t value, bool include_type) {
     VT type = resolve_type(value);
     std::string res = "[" + type_to_string(type) + ": ";
 
@@ -286,13 +206,17 @@ std::string value_to_string(uint64_t value, bool include_type=false) {
             v_string = std::to_string(resolve_fixnum(value));
             break;
         case VT::CHAR:
-            v_string = resolve_char(value);
+            v_string = "#\\";
+            v_string += resolve_char(value);
             break;
         case VT::BOOL:
             v_string = cpp_bool_to_scheme_bool(resolve_bool((value)));
             break;
         case VT::STRING:
             v_string = resolve_string(value);
+            break;
+        case VT::VECTOR:
+            v_string = vector_to_string(value);
             break;
         case VT::UNSPECIFIED:
             v_string = "unspecified";
@@ -308,50 +232,6 @@ std::string value_to_string(uint64_t value, bool include_type=false) {
     res += v_string + "]";
     return res;
 }
-
-// 8-byte stack values
-class v_stack {
-private:
-    std::vector<uint64_t> s;
-public:
-    void push(uint64_t value) {
-        s.push_back(value);
-    }
-
-    bool empty() {
-        return s.empty();
-    }
-
-    uint64_t pop() {
-        if (s.size() <= 0) {
-            throw std::runtime_error("attempt to pop from empty stack.");
-        }
-        uint64_t value = s.back();
-        s.pop_back();
-        return value;
-    }
-
-    uint64_t pop_and_check_type(VT type) {
-        uint64_t value = pop();
-        type_check_or_fail(value, type);
-        return value;
-    }
-
-    uint64_t get_value_from_top(uint64_t index) {
-        if (index > s.size() or s.size() <= 0) {
-            throw std::runtime_error(std::format("index {} too great for stack size: {}", index, s.size()));
-        }
-        return s[(s.size()-1) - index];
-    }
-
-    void print_state() {
-        std::cout << "STACK: { ";
-        for (uint64_t v: s) {
-            std::cout << value_to_string(v, true) << " ";
-        }
-        std::cout << "}" << std::endl;
-    }
-};
 
 // Read a qword from the code
 uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
@@ -389,7 +269,7 @@ char *get_char_ptr(uint64_t idx_value, uint64_t str_value) {
     uint64_t length_value = *str_ptr;
     int64_t length = resolve_fixnum(length_value);
     int64_t idx = resolve_fixnum(idx_value);
-    if (idx > length || idx < 0) {
+    if (idx >= length || idx < 0) {
         throw std::runtime_error(std::format("Invalid string index: (index {} for length of {})", idx, length));
     }
 
@@ -398,6 +278,22 @@ char *get_char_ptr(uint64_t idx_value, uint64_t str_value) {
     char *c_ptr = (char *) str_ptr;
     c_ptr += idx;
     return c_ptr;
+}
+
+uint64_t *get_vector_ptr(uint64_t idx_ptr, uint64_t vec_ptr) {
+        // Resolve to their true values
+        strip_tag(vec_ptr);
+        int64_t idx = resolve_fixnum(idx_ptr);
+        uint64_t *vec_slot = (uint64_t *) vec_ptr;
+        int64_t length = resolve_fixnum(*vec_slot);
+        if (idx >= length || idx < 0) {
+            throw std::runtime_error(std::format("Invalid vector index {} for length {}", idx, length));
+        }
+
+        // Index into the vector
+        vec_slot += WORD_LEN;
+        vec_slot += (WORD_LEN) * length;
+        return vec_slot;
 }
 
 // Run the code
@@ -784,6 +680,100 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
 
                 // Push ptr to the newly created string
                 stk.push(ptr);
+                break;
+            }
+            case opcode_t::ALLOC_VEC:
+            {
+                DEBUG_MSG("ALLOC_VEC");
+                uint64_t length_ptr = read_word(pc, code);
+                type_check_or_fail(length_ptr, VT::FIXNUM);
+                int64_t length = resolve_fixnum(length_ptr);
+                if (length < 0) {
+                    throw std::runtime_error(std::format("Invalid length for call to vector allocation: {}", length));
+                }
+
+                // Save a ptr to the current spot on the heap and write the vec length
+                uint64_t ptr = (uint64_t) heap_ptr | VECTOR_TAG;
+                heap_write_word(length_ptr);
+
+                // Write vector args to the heap
+                for (int64_t i = 0; i < length; i++) {
+                    uint64_t value = stk.pop();
+                    heap_write_word(value);
+                }
+
+                // Push ptr to vector
+                stk.push(ptr);
+                break;
+            }
+            case opcode_t::VEC_REF:
+            {
+                DEBUG_MSG("VEC_REF");
+                // Get vector and index to grab
+                uint64_t idx_ptr = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t vec_ptr = stk.pop_and_check_type(VT::VECTOR);
+
+                // Get the object at the index and push it
+                uint64_t *vector_slot = get_vector_ptr(idx_ptr, vec_ptr);
+                uint64_t result = *vector_slot;
+                stk.push(result);
+                break;
+            }
+            case opcode_t::VEC_SET:
+            {
+                DEBUG_MSG("VEC_SET");
+                // Get function args
+                uint64_t obj_ptr = stk.pop();
+                uint64_t idx_ptr = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t vec_ptr = stk.pop_and_check_type(VT::VECTOR);
+
+                // Swap the object at the index
+                uint64_t *vector_slot = get_vector_ptr(idx_ptr, vec_ptr);
+                *vector_slot = obj_ptr;
+
+                // Push unspecified
+                stk.push(UNSPEC_VAL);
+                break;
+            }
+            case opcode_t::VEC_APPEND:
+            {
+                DEBUG_MSG("VEC_APPEND");
+                uint64_t n_vecs_ptr = read_word(pc, code);
+                type_check_or_fail(n_vecs_ptr, VT::FIXNUM);
+                int64_t n_vecs = resolve_fixnum(n_vecs_ptr);
+                if (n_vecs < 0) {
+                    throw std::runtime_error(std::format("Invalid length for call to append vectors: {}", n_vecs));
+                }
+
+                uint64_t result = (uint64_t) heap_ptr | VECTOR_TAG;
+                uint64_t *new_vec_ptr = heap_ptr;
+                heap_ptr += WORD_LEN;
+                
+                // Iterate over all vector arguments
+                int64_t total_length = 0;
+                for (int64_t i = 0; i < n_vecs; i++) {
+                    // Get next vector
+                    uint64_t vec_ptr = stk.pop_and_check_type(VT::VECTOR);
+                    strip_tag(vec_ptr);
+                    uint64_t *curr_ptr = (uint64_t *) vec_ptr;
+
+                    // Grab vector length and validate
+                    uint64_t curr_length_ptr = *curr_ptr;
+                    int64_t curr_length = resolve_fixnum(curr_length_ptr);
+                    validate_allocation(curr_length);
+                    total_length += curr_length;
+
+                    // Write vector elements to new vector
+                    curr_ptr += WORD_LEN;
+                    for (int64_t j = 0; j < curr_length; j++) {
+                        heap_write_word(*curr_ptr);
+                    }
+                }
+                
+                // Write total length to heap and push the vector
+                uint64_t total_length_ptr = create_fixnum_ptr(total_length);
+                *new_vec_ptr = total_length_ptr;
+                stk.push(result);
                 break;
             }
             default:

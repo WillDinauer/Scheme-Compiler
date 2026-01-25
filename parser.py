@@ -32,6 +32,12 @@ class Parser:
 
     def finished(self):
         return self.pos >= self.length
+    
+    # Increment the place in the file, raise error if reached EOF.
+    def try_increment(self, err):
+        self.pos += 1
+        if self.finished():
+            raise err
 
     def parse(self) -> object:
         self.skip_whitespace()
@@ -55,12 +61,6 @@ class Parser:
                 return self.parse_symbol()
             case c:
                 raise NotImplementedError(f"Unhandled character {c}")
-    
-    # Increment the place in the file, raise error if reached EOF.
-    def try_increment(self, err):
-        self.pos += 1
-        if self.finished():
-            raise err
         
     def is_delim(self, c):
         return c.isspace() or c == ')' or c == '('

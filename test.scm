@@ -1,1 +1,1 @@
-(string-set! "hello" 0 #\l)
+(vector 1 2 3)
