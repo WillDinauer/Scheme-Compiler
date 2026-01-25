@@ -52,6 +52,11 @@
 #define TRUE_BOOL       ((T_BOOL_VAL) << BOOL_SHIFT | BOOL_TAG)
 #define FALSE_BOOL      ((F_BOOL_VAL) << BOOL_SHIFT | BOOL_TAG)
 
+// Heap
+uint64_t heap[1024];
+uint64_t* heap_ptr = heap;
+uint64_t* heap_end = heap_ptr + 1024;
+
 // Value Type
 enum VT {
     FIXNUM,
@@ -105,6 +110,9 @@ enum opcode_t : uint8_t {
 
     // String
     ALLOC_STR = 0x19,
+    STR_REF = 0x1A,
+    STR_SET = 0x1B,
+    STR_APPEND = 0x1C,
 };
 
 int64_t create_fixnum_ptr(int64_t num) {
@@ -227,7 +235,6 @@ int64_t resolve_fixnum(int64_t value) {
     return value >> FIXNUM_SHIFT;
 }
 
-
 std::string resolve_string(uint64_t value) {
     type_check_or_fail(value, VT::STRING);
     strip_tag(value);
@@ -251,7 +258,7 @@ std::string cpp_bool_to_scheme_bool(bool value) {
     return value ? "#t" : "#f";
 }
 
-void validate_allocation(uint64_t* heap_ptr, uint64_t* heap_end, uint64_t size) {
+void validate_allocation(uint64_t size) {
     if (heap_ptr + size > heap_end) {
         throw std::runtime_error("Ran out of heap space.");
     }
@@ -348,20 +355,16 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
 }
 
 // Write a word to the heap
-void heap_write_word(uint64_t** heap_ptr_ref, uint64_t* heap_end, uint64_t value) {
-    validate_allocation(*heap_ptr_ref, heap_end, WORD_LEN);
-    **heap_ptr_ref = value;
-    *heap_ptr_ref += WORD_LEN;
+void heap_write_word(uint64_t value) {
+    validate_allocation(WORD_LEN);
+    *heap_ptr = value;
+    heap_ptr += WORD_LEN;
 }
 
 // Run the code
 std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
     v_stack stk;
-
-    static uint64_t heap[1024];
-    uint64_t* heap_ptr = heap;
-    uint64_t* heap_end = heap_ptr + 1024;
 
     while (pc < code.size()) {
         DEBUG_MSG(std::format("\npc: {}", pc));
@@ -579,7 +582,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::CONS:
             {
                 DEBUG_MSG("CONS");
-                validate_allocation(heap_ptr, heap_end, 2*WORD_LEN);
+                validate_allocation(2*WORD_LEN);
 
                 // Grab CAR and CDR
                 uint64_t cdr = stk.pop();
@@ -589,8 +592,8 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 uint64_t addr = (uint64_t) heap_ptr | PAIR_TAG;
 
                 // Place onto heap, then push addr
-                heap_write_word(&heap_ptr, heap_end, car);
-                heap_write_word(&heap_ptr, heap_end, cdr);
+                heap_write_word(car);
+                heap_write_word(cdr);
                 stk.push(addr);
                 break;
             }
@@ -627,26 +630,49 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::ALLOC_STR:
             {
                 DEBUG_MSG("ALLOC_STR");
-                uint64_t length = read_word(pc, code);
-                type_check_or_fail(length, VT::FIXNUM);
+                uint64_t value = read_word(pc, code);
+                type_check_or_fail(value, VT::FIXNUM);
+                int64_t length = resolve_fixnum(value);
 
-                // (+ 1) for length entry
-                validate_allocation(heap_ptr, heap_end, (length + 1) * WORD_LEN);
+                if (length < 0) {
+                    throw std::runtime_error(std::format("Call to allocate string with negative length value: {}", length));
+                }
+
+                // allocation for length (8 bytes) and chars ('length' bytes)
+                validate_allocation(length + WORD_LEN);
 
                 // Save the current location of the heap ptr as the value to push
                 uint64_t ptr = (uint64_t) heap_ptr | STRING_TAG;
 
                 // Write length to the heap
-                heap_write_word(&heap_ptr, heap_end, length);
+                heap_write_word(value);
                 
                 // Read 'length' # of chars and place them on the heap
-                for (int i = 0; i < resolve_fixnum(length); i += WORD_LEN) {
-                    uint64_t value = read_word(pc, code);
-
-                    heap_write_word(&heap_ptr, heap_end, value);
+                char* char_ptr = (char *) heap_ptr;
+                for (int i = 0; i < length; i++) {
+                    uint64_t char_value = stk.pop_and_check_type(VT::CHAR);
+                    char c = resolve_char(char_value);
+                    *char_ptr = c;
+                    char_ptr++;
                 }
 
+                // Align the heap ptr
+                heap_ptr += length + (WORD_LEN - 1);
+                heap_ptr = (uint64_t *) ((uint64_t) heap_ptr & PTR_NUKE);
+
                 stk.push(ptr);
+                break;
+            }
+            case opcode_t::STR_REF:
+            {
+                break;
+            }
+            case opcode_t::STR_SET:
+            {
+                break;
+            }
+            case opcode_t::STR_APPEND:
+            {
                 break;
             }
             default:

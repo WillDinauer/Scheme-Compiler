@@ -50,6 +50,9 @@ class I(enum.IntEnum):
 
     # String
     ALLOC_STR = enum.auto()
+    STR_REF = enum.auto()
+    STR_SET = enum.auto()
+    STR_APPEND = enum.auto()
 
 # Container for shift/tagging information
 class SI:
@@ -139,6 +142,22 @@ class Compiler:
         for local in new_environment:
             new_environment[local] += shift
         return new_environment
+    
+    def compile_string(self, char_arr, environment):
+        ops = []
+        length = len(char_arr)
+
+        # Compile all characters (in reverse order, for stack purposes)
+        for i in range(len(char_arr) - 1, -1, -1):
+            c = char_arr[i]
+            ops += self.compile(c, self.update_indices(environment, len(char_arr) - 1 - i))
+
+        # Consume the characters on the stack to create a string
+        ops.append(I.ALLOC_STR)
+        ops.append(box_fixnum(length))
+
+        return ops
+        
 
     def compile(self, expr, environment) -> list:
         ops = []
@@ -158,23 +177,7 @@ class Compiler:
                 emit(box_char(expr.to_string()))
             case String():
                 char_arr = expr.get_characters()
-                length = len(char_arr)
-
-                emit(I.ALLOC_STR)
-                emit(box_fixnum(length))
-                
-                # Emit word-length chunks of the string
-                i = 0
-                while i < length:
-                    cur = 0
-                    # Iterate over character array
-                    for i in range(i + OP_LEN - 1, i - 1, -1):
-                        cur <<= BYTE_LEN
-                        if i < length:
-                            cur |= ord(char_arr[i].get_char())
-                    emit(cur)
-                    i += OP_LEN
-
+                ops += self.compile_string(char_arr, environment)
             case list():
                 # Empty list
                 if len(expr) == 0:
@@ -315,6 +318,28 @@ class Compiler:
                         # Tear down local variables
                         for _ in range(len(bindings)):
                             emit(I.SQUASH)
+                    
+                    # String functions
+                    case "string":
+                        ops += self.compile_string(expr[1:])
+                    case "string-ref":
+                        validate_args(expr, 2)
+                        ops += self.compile(expr[1], environment)
+                        ops += self.compile(expr[2], self.update_indices(environment, 1))
+                        emit(I.STR_REF)
+                    case "string-set!":
+                        validate_args(expr, 3)
+                        ops += self.compile(expr[1], environment)
+                        ops += self.compile(expr[2], self.update_indices(environment, 1))
+                        ops += self.compile(expr[3], self.update_indices(environment, 2))
+                        emit(I.STR_SET)
+                    case "string-append":
+                        strs = expr[1:]
+                        for i, s in enumerate(strs):
+                            ops += self.compile(s, self.update_indices(environment, i))
+                        emit(I.STR_APPEND)
+                        emit(box_fixnum(len(strs)))
+                        
 
                     case _:
                         compiler_error(f"Calling unbound/undefined '{func_name}' as a function.")
