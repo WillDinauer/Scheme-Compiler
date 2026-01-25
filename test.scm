@@ -1,1 +1,1 @@
-(string-ref "hello" 1)
+(string-append "he" "ll" "o")

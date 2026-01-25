@@ -335,7 +335,8 @@ class Compiler:
                         emit(I.STR_SET)
                     case "string-append":
                         strs = expr[1:]
-                        for i, s in enumerate(strs):
+                        for i in range(len(strs) - 1, -1, -1):
+                            s = strs[i]
                             ops += self.compile(s, self.update_indices(environment, i))
                         emit(I.STR_APPEND)
                         emit(box_fixnum(len(strs)))

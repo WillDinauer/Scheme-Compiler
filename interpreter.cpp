@@ -365,6 +365,31 @@ void heap_write_word(uint64_t value) {
     heap_ptr += WORD_LEN;
 }
 
+// Align the heap for future allocations
+void align_heap() {
+    heap_ptr += (WORD_LEN - 1);
+    heap_ptr = (uint64_t *) ((uint64_t) heap_ptr & PTR_NUKE);
+}
+
+char *get_char_ptr(uint64_t idx_value, uint64_t str_value) {
+    strip_tag(str_value);
+    uint64_t* str_ptr = (uint64_t *) str_value;
+
+    // Get length and index
+    uint64_t length_value = *str_ptr;
+    int64_t length = resolve_fixnum(length_value);
+    int64_t idx = resolve_fixnum(idx_value);
+    if (idx > length || idx < 0) {
+        throw std::runtime_error(std::format("Invalid string index: (index {} for length of {})", idx, length));
+    }
+
+    // Resolve the char_ptr
+    str_ptr += WORD_LEN;
+    char *c_ptr = (char *) str_ptr;
+    c_ptr += idx;
+    return c_ptr;
+}
+
 // Run the code
 std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
@@ -661,8 +686,8 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 }
 
                 // Align the heap ptr
-                heap_ptr += length + (WORD_LEN - 1);
-                heap_ptr = (uint64_t *) ((uint64_t) heap_ptr & PTR_NUKE);
+                heap_ptr += length;
+                align_heap();
 
                 stk.push(ptr);
                 break;
@@ -675,20 +700,9 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
 
                 // Get string pointer
                 uint64_t str_value = stk.pop_and_check_type(VT::STRING);
-                strip_tag(str_value);
-                uint64_t* str_ptr = (uint64_t *) str_value;
 
-                uint64_t length_value = *str_ptr;
-                uint64_t length = resolve_fixnum(length_value);
-                uint64_t idx = resolve_fixnum(idx_value);
-                if (idx > length) {
-                    throw std::runtime_error(std::format("Invalid index for call to string-ref ({} > length of {})", idx, length));
-                }
-
-                // Get the char
-                str_ptr += WORD_LEN;
-                char *c_ptr = (char *) str_ptr;
-                c_ptr += idx;
+                // Resolve the ptr into the string
+                char* c_ptr = get_char_ptr(idx_value, str_value);
                 char c = *c_ptr;
                 uint64_t char_ptr = create_char_ptr(c);
                 stk.push(char_ptr);
@@ -696,10 +710,69 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::STR_SET:
             {
+                DEBUG_MSG("STR_SET");
+                // Char to set
+                uint64_t char_value = stk.pop_and_check_type(VT::CHAR);
+                char c = resolve_char(char_value);
+
+                // Get index and string
+                uint64_t idx_value = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t str_value = stk.pop_and_check_type(VT::STRING);
+
+                // Ptr to specific char in string
+                char* c_ptr = get_char_ptr(idx_value, str_value);
+
+                // Set the char
+                *c_ptr = c;
                 break;
             }
             case opcode_t::STR_APPEND:
             {
+                DEBUG_MSG("STR_APPEND");
+                uint64_t value = read_word(pc, code);
+                type_check_or_fail(value, VT::FIXNUM);
+                int64_t num_strs = resolve_fixnum(value);
+                if (num_strs < 0) { 
+                    throw std::runtime_error(std::format("Invalid # of strings for call to str_append: {}", num_strs));
+                }
+
+                uint64_t* new_str_ptr = heap_ptr;
+                heap_ptr += WORD_LEN;
+
+                int64_t total_length = 0;
+                for (int64_t i = 0; i < num_strs; i++) {
+                    // Get str from the tag
+                    uint64_t str_value = stk.pop_and_check_type(VT::STRING);
+                    strip_tag(str_value);
+                    uint64_t* str_ptr = (uint64_t *) str_value;
+
+                    // Validate length
+                    uint64_t length_ptr = *str_ptr;
+                    int64_t length = resolve_fixnum(length_ptr);
+                    validate_allocation(*str_ptr);
+                    total_length += length;
+                    *new_str_ptr = total_length;
+
+                    // Write characters
+                    str_ptr += WORD_LEN;
+                    char *heap_p = (char *)heap_ptr;
+                    char *c_ptr = (char *)str_ptr;
+                    for (int64_t j = 0; j < length; j++) {
+                        *heap_p = *c_ptr;
+                        heap_p++;
+                        c_ptr++;
+                    }
+                    heap_ptr = (uint64_t *) heap_p;
+                }
+                align_heap();
+                
+                // Write length to heap
+                uint64_t length_ptr = create_fixnum_ptr(total_length);
+                *new_str_ptr = length_ptr;
+                uint64_t ptr = (uint64_t) new_str_ptr | STRING_TAG;
+
+                // Push ptr to the newly created string
+                stk.push(ptr);
                 break;
             }
             default:
