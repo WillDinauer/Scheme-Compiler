@@ -298,6 +298,15 @@ class Compiler:
                         # Tear down local variables
                         for _ in range(len(bindings)):
                             emit(I.SQUASH)
+                    case "begin":
+                        # Compile all subexpressions
+                        sub_expressions = expr[1:]
+                        for i, sub_expr in enumerate(sub_expressions):
+                            ops += self.compile(sub_expr, environment)
+
+                            # Drop unused values
+                            if i < len(sub_expressions) - 1:
+                                emit(I.DROP)
                     
                     # String functions
                     case "string":

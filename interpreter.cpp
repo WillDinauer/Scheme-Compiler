@@ -285,14 +285,15 @@ uint64_t *get_vector_ptr(uint64_t idx_ptr, uint64_t vec_ptr) {
         strip_tag(vec_ptr);
         int64_t idx = resolve_fixnum(idx_ptr);
         uint64_t *vec_slot = (uint64_t *) vec_ptr;
+        std::cout << "start: " << vec_slot << std::endl;
         int64_t length = resolve_fixnum(*vec_slot);
         if (idx >= length || idx < 0) {
             throw std::runtime_error(std::format("Invalid vector index {} for length {}", idx, length));
         }
 
         // Index into the vector
-        vec_slot += WORD_LEN;
-        vec_slot += (WORD_LEN) * length;
+        vec_slot += (WORD_LEN * (1 + idx));
+        std::cout << "end: " << vec_slot << std::endl;
         return vec_slot;
 }
 
