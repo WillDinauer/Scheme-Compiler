@@ -1,1 +1,1 @@
-"hello"
+(string-ref "hello" 1)

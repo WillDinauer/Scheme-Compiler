@@ -39,6 +39,9 @@ if [[ "$1" == "tests" ]]; then
                 echo -e "${RED}FAILED.${NC}"
                 echo "Running diff to compare."
                 diff $TEMP $test_dir/expected.txt
+                rm "tests/$COMPILED_FILE"
+                rm "tests/temp.txt"
+                exit -1
             fi
 
             # Clean up

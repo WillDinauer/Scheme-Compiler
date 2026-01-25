@@ -119,6 +119,10 @@ int64_t create_fixnum_ptr(int64_t num) {
     return (num << FIXNUM_SHIFT) | FIXNUM_TAG;
 }
 
+uint64_t create_char_ptr(char c) {
+    return ((uint64_t) c << CHAR_SHIFT) | CHAR_TAG;
+}
+
 std::string type_to_string(VT type) {
     switch (type) {
         case VT::FIXNUM:
@@ -275,7 +279,7 @@ std::string value_to_string(uint64_t value, bool include_type=false) {
             v_string = std::to_string(resolve_fixnum(value));
             break;
         case VT::CHAR:
-            v_string = std::to_string(resolve_char(value));
+            v_string = resolve_char(value);
             break;
         case VT::BOOL:
             v_string = cpp_bool_to_scheme_bool(resolve_bool((value)));
@@ -665,6 +669,29 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::STR_REF:
             {
+                DEBUG_MSG("STR_REF");
+                // Index to grab
+                uint64_t idx_value = stk.pop_and_check_type(VT::FIXNUM);
+
+                // Get string pointer
+                uint64_t str_value = stk.pop_and_check_type(VT::STRING);
+                strip_tag(str_value);
+                uint64_t* str_ptr = (uint64_t *) str_value;
+
+                uint64_t length_value = *str_ptr;
+                uint64_t length = resolve_fixnum(length_value);
+                uint64_t idx = resolve_fixnum(idx_value);
+                if (idx > length) {
+                    throw std::runtime_error(std::format("Invalid index for call to string-ref ({} > length of {})", idx, length));
+                }
+
+                // Get the char
+                str_ptr += WORD_LEN;
+                char *c_ptr = (char *) str_ptr;
+                c_ptr += idx;
+                char c = *c_ptr;
+                uint64_t char_ptr = create_char_ptr(c);
+                stk.push(char_ptr);
                 break;
             }
             case opcode_t::STR_SET:
