@@ -321,7 +321,7 @@ class Compiler:
                     
                     # String functions
                     case "string":
-                        ops += self.compile_string(expr[1:])
+                        ops += self.compile_string(expr[1:], environment)
                     case "string-ref":
                         validate_args(expr, 2)
                         ops += self.compile(expr[1], environment)

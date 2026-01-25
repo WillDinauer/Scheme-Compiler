@@ -32,6 +32,7 @@
 #define EL_MASK         255
 #define EL_TAG          47
 #define EL_SHIFT        0
+#define UNSPEC_VAL      -1
 
 // Ptrs
 #define PTR_MASK        7
@@ -68,6 +69,7 @@ enum VT {
     STRING,
     SYMBOL,
     CLOSURE,
+    UNSPECIFIED,
     UNKNOWN
 };
 
@@ -143,6 +145,8 @@ std::string type_to_string(VT type) {
             return "SYMBOL";
         case VT::CLOSURE:
             return "CLOSURE";
+        case VT::UNSPECIFIED:
+            return "UNSPECIFIED";
         case VT::UNKNOWN:
             return "UNKNOWN";
     }
@@ -173,6 +177,9 @@ VT resolve_type(uint64_t value) {
             return VT::SYMBOL;
         case CLOSURE_TAG:
             return VT::CLOSURE;
+    }
+    if ((int64_t) value == UNSPEC_VAL) {
+        return VT::UNSPECIFIED;
     }
     throw std::runtime_error(std::format("Unable to resolve type for value: {}", value));
 }
@@ -286,6 +293,9 @@ std::string value_to_string(uint64_t value, bool include_type=false) {
             break;
         case VT::STRING:
             v_string = resolve_string(value);
+            break;
+        case VT::UNSPECIFIED:
+            v_string = "unspecified";
             break;
         default:
             v_string = std::to_string(value);
@@ -724,6 +734,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
 
                 // Set the char
                 *c_ptr = c;
+                stk.push(UNSPEC_VAL);
                 break;
             }
             case opcode_t::STR_APPEND:

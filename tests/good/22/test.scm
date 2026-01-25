@@ -1,0 +1,1 @@
+(string-ref (string #\a #\b #\c) 2)

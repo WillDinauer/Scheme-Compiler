@@ -1,1 +1,1 @@
-(string-append "he" "ll" "o")
+(string-set! "hello" 0 #\l)

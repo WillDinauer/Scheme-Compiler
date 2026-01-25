@@ -1,0 +1,1 @@
+(string #\h #\e #\y #\space #\t #\h #\e #\r #\e #\newline #\h #\i #\!)
