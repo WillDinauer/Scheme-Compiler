@@ -175,7 +175,7 @@ class Compiler:
         for i, sub_expr in enumerate(expr[1:]):
             ops += self.compile(sub_expr, self.update_indices(environment, i))
         # Add specific opcode
-        ops += opcode
+        ops.append(opcode)
         return ops
 
         
