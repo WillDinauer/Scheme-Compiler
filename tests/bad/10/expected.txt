@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: Invalid usage of function 'cons': 2 args expected.

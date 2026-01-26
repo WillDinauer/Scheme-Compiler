@@ -19,11 +19,20 @@ compile() {
 
 # -- Run all the tests --
 if [[ "$1" == "tests" ]]; then
+    # Build the interpreter
+    echo -e "${BLUE} -- BUILDING INTERPRETER -- ${NC}"
+    make clean && make
+    echo -e "${GREEN} -- BUILD SUCCEEDED -- ${NC}"
+    echo
+
+    # Run good tests
     TEMP=tests/temp.txt
+    GOOD_DIR=tests/good
+    BAD_DIR=tests/bad
     echo -e "${BLUE} -- RUNNING GOOD TESTS -- ${NC}"
-    for test_dir in tests/good/*; do
+    for TEST in `ls $GOOD_DIR | sort -g`; do
+        test_dir=$GOOD_DIR/$TEST
         if [ -d "$test_dir" ]; then
-            TEST=$(basename $test_dir)
             echo -n "Running good test $TEST..."
             compile "$test_dir/test.scm" "tests/$COMPILED_FILE"
 
@@ -53,10 +62,12 @@ if [[ "$1" == "tests" ]]; then
     done
     echo -e "${GREEN} -- PASSED ALL GOOD TESTS -- ${NC}"
     echo
+
+    # Run bad tests
     echo -e "${BLUE} -- RUNNING ALL BAD TESTS -- ${NC}"
-    for test_dir in tests/bad/*; do
+    for TEST in `ls $BAD_DIR | sort -g`; do
+        test_dir=$BAD_DIR/$TEST
         if [ -d "$test_dir" ]; then
-            TEST=$(basename $test_dir)
             echo -n "Running bad test $TEST..."
             python3 compiler.py < "$test_dir/test.scm" 2> $TEMP
             if [[ $? == 0 ]]; then
