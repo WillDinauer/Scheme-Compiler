@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: Bad let: Invalid binding 'a' - bindings are of form (symbol value)

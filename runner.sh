@@ -4,6 +4,7 @@ COMPILED_FILE=compiled.bc
 # Colors
 RED="\033[0;31m"
 GREEN="\033[0;32m"
+BLUE="\033[0;34m"
 NC="\033[0m"
 
 # Check number of args for usage
@@ -19,10 +20,11 @@ compile() {
 # -- Run all the tests --
 if [[ "$1" == "tests" ]]; then
     TEMP=tests/temp.txt
+    echo -e "${BLUE} -- RUNNING GOOD TESTS -- ${NC}"
     for test_dir in tests/good/*; do
         if [ -d "$test_dir" ]; then
             TEST=$(basename $test_dir)
-            echo -n "Running test $TEST..."
+            echo -n "Running good test $TEST..."
             compile "$test_dir/test.scm" "tests/$COMPILED_FILE"
 
             if [[ $? -ne 0 ]]; then
@@ -40,29 +42,44 @@ if [[ "$1" == "tests" ]]; then
                 echo "Running diff to compare."
                 diff $TEMP $test_dir/expected.txt
                 rm "tests/$COMPILED_FILE"
-                rm "tests/temp.txt"
+                rm $TEMP
                 exit -1
             fi
 
             # Clean up
             rm "tests/$COMPILED_FILE"
-            rm "tests/temp.txt"
+            rm $TEMP
         fi
     done
+    echo -e "${GREEN} -- PASSED ALL GOOD TESTS -- ${NC}"
+    echo
+    echo -e "${BLUE} -- RUNNING ALL BAD TESTS -- ${NC}"
+    for test_dir in tests/bad/*; do
+        if [ -d "$test_dir" ]; then
+            TEST=$(basename $test_dir)
+            echo -n "Running bad test $TEST..."
+            python3 compiler.py < "$test_dir/test.scm" 2> $TEMP
+            if [[ $? == 0 ]]; then
+                echo -e "${RED}FAILED.${NC} (these tests should not compile...)"
+                exit -1
+            fi
 
-    for test in tests/bad/*; do
-        echo "Running bad test $test...here it is:"
-        cat $test
-        compile $test "tests/$COMPILED_FILE"
-
-        if [[ $? -ne 0 ]]; then
-            echo -e "${GREEN}PASSED.${NC} (but check the error...)"
-        else
-            echo -e "${RED}FAILED.${NC} (these tests should not compile...)"
-            rm "test/$COMPILED_FILE"
-            exit -1
+            tail -n 1 $TEMP > tests/out.txt
+            rm $TEMP
+            if cmp -s tests/out.txt $test_dir/expected.txt; then
+                echo -e "${GREEN}PASSED.${NC}"
+            else
+                echo -e "${RED}FAILED.${NC}"
+                echo "Running diff to compare."
+                diff tests/out.txt $test_dir/expected.txt
+                rm tests/out.txt
+                exit -1
+            fi
+            rm tests/out.txt
         fi
     done
+    echo -e "${GREEN} -- PASSED ALL BAD TESTS -- ${NC}"
+    echo
     
     echo -e "${GREEN}Passed ALL tests! (good and bad!)${NC}"
     exit 0

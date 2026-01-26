@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: 'let' must be of form: (let ((symbol_1 value_2) ... (symbol_n value_n)) expr_1 ... expr_n)

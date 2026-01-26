@@ -78,7 +78,7 @@ SHIFT_INFO = {
 def tag_ptr(value, type):
     si = SHIFT_INFO[type]
     if value >= 2 ** (SYSTEM_TYPE - si.shift):
-        raise ValueError(f"{type} value {value} too large to store")
+        raise ValueError(f"{LOG_TAG}: {type} value {value} too large to store")
     
     # Shift and tag
     value = value << si.shift
@@ -104,7 +104,7 @@ def compiler_error(msg):
 
 def validate_args(expr, num_args):
     if num_args != len(expr[1:]):
-        error_msg = f"Invalid usage of function '{expr[0]}' - {num_args} args expected."
+        error_msg = f"Invalid usage of function '{expr[0]}': {num_args} args expected."
         compiler_error(error_msg)
 
 class Compiler:
@@ -340,7 +340,7 @@ class Compiler:
                     emit(I.GET)
                     emit(box_fixnum(environment[expr]))
                 else:
-                    compiler_error(f"Use of undefined variable/function '{expr}'")
+                    compiler_error(f"Use of undefined variable '{expr}'")
         return ops
     
     def compile_function(self, expr):
