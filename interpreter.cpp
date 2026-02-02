@@ -554,15 +554,6 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 stk.push(*addr);
                 break;
             }
-            case opcode_t::RETURN:
-            {
-                DEBUG_MSG("RETURN");
-                if (stk.empty()) {
-                    return nullptr; 
-                }
-                uint64_t value = stk.pop();
-                return std::make_unique<uint64_t>(value);
-            }
             case opcode_t::ALLOC_STR:
             {
                 DEBUG_MSG("ALLOC_STR");
@@ -776,6 +767,23 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 *new_vec_ptr = total_length_ptr;
                 stk.push(result);
                 break;
+            }
+            case opcode_t::FUNCALL:
+            {
+                break;
+            }
+            case opcode_t::RETURN:
+            {
+                break;
+            }
+            case opcode_t::FINISH:
+            {
+                DEBUG_MSG("FINISH");
+                if (stk.empty()) {
+                    return nullptr; 
+                }
+                uint64_t value = stk.pop();
+                return std::make_unique<uint64_t>(value);
             }
             default:
             {

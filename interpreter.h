@@ -66,7 +66,7 @@ enum VT {
 // 1 byte opcodes
 enum opcode_t : uint8_t {
     LOAD64 = 0x01,
-    RETURN = 0x02,
+    FINISH = 0x02,
 
     // Unary functions
     ADD1 = 0x03,
@@ -111,6 +111,11 @@ enum opcode_t : uint8_t {
     VEC_REF = 0x1E,
     VEC_SET = 0x1F,
     VEC_APPEND = 0x20,
+
+    // Function calls
+    ALLOC_LAM = 0x21,
+    FUNCALL = 0x22,
+    RETURN = 0x23,
 };
 
 // Type resolution and checking
