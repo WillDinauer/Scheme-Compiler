@@ -248,6 +248,13 @@ uint64_t read_word(size_t& pc, std::vector<uint8_t>& code) {
     return ret;
 }
 
+// Read a word from the code and check its type
+uint64_t typed_read_word(size_t& pc, std::vector<uint8_t>& code, VT type) {
+    uint64_t value = read_word(pc, code);
+    type_check_or_fail(value, type);
+    return value;
+}
+
 // Write a word to the heap
 void heap_write_word(uint64_t value) {
     validate_allocation(WORD_LEN);
@@ -497,20 +504,18 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::JMP:
             {
                 DEBUG_MSG("JMP");
-                uint64_t jump_length = read_word(pc, code);
-                type_check_or_fail(jump_length, VT::FIXNUM);
+                uint64_t jump_length = typed_read_word(pc, code, VT::FIXNUM);
                 pc += resolve_fixnum(jump_length);
                 break;
             }
             case opcode_t::JIF:
             {
                 DEBUG_MSG("JIF");
-                uint64_t jump_length = read_word(pc, code);
+                uint64_t jump_length = typed_read_word(pc, code, VT::FIXNUM);
                 uint64_t value = stk.pop();
                 VT type = resolve_type(value);
                 if (type == VT::BOOL && !resolve_bool(value)) {
                     DEBUG_MSG("JUMP IN JIF...(condition == '#f')");
-                    type_check_or_fail(jump_length, VT::FIXNUM);
                     pc += resolve_fixnum(jump_length);
                 }
                 break;
@@ -557,8 +562,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::ALLOC_STR:
             {
                 DEBUG_MSG("ALLOC_STR");
-                uint64_t value = read_word(pc, code);
-                type_check_or_fail(value, VT::FIXNUM);
+                uint64_t value = typed_read_word(pc, code, VT::FIXNUM);
                 int64_t length = resolve_fixnum(value);
 
                 if (length < 0) {
@@ -628,8 +632,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::STR_APPEND:
             {
                 DEBUG_MSG("STR_APPEND");
-                uint64_t value = read_word(pc, code);
-                type_check_or_fail(value, VT::FIXNUM);
+                uint64_t value = typed_read_word(pc, code, VT::FIXNUM);
                 int64_t num_strs = resolve_fixnum(value);
                 if (num_strs < 0) { 
                     throw std::runtime_error(std::format("Invalid # of strings for call to str_append: {}", num_strs));
@@ -677,8 +680,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::ALLOC_VEC:
             {
                 DEBUG_MSG("ALLOC_VEC");
-                uint64_t length_ptr = read_word(pc, code);
-                type_check_or_fail(length_ptr, VT::FIXNUM);
+                uint64_t length_ptr = typed_read_word(pc, code, VT::FIXNUM);
                 int64_t length = resolve_fixnum(length_ptr);
                 if (length < 0) {
                     throw std::runtime_error(std::format("Invalid length for call to vector allocation: {}", length));
@@ -730,8 +732,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::VEC_APPEND:
             {
                 DEBUG_MSG("VEC_APPEND");
-                uint64_t n_vecs_ptr = read_word(pc, code);
-                type_check_or_fail(n_vecs_ptr, VT::FIXNUM);
+                uint64_t n_vecs_ptr = typed_read_word(pc, code, VT::FIXNUM);
                 int64_t n_vecs = resolve_fixnum(n_vecs_ptr);
                 if (n_vecs < 0) {
                     throw std::runtime_error(std::format("Invalid length for call to append vectors: {}", n_vecs));
@@ -770,10 +771,27 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             }
             case opcode_t::FUNCALL:
             {
+                DEBUG_MSG("FUNCALL");
+                // Get the arg count immediate
+                uint64_t tagged_arg_ct = typed_read_word(pc, code, VT::FIXNUM);
+                int64_t num_args = resolve_fixnum(tagged_arg_ct);
+
+                // Get the closure
+                uint64_t tagged_closure = stk.pop_and_check_type(VT::CLOSURE);
+                strip_tag(tagged_closure);
+                uint64_t* closure = (uint64_t*) tagged_closure;
+
+                // Validate # of arguments
+                int64_t check_ct = resolve_fixnum(*closure);
+                if (num_args != check_ct) {
+                    throw std::runtime_error(std::format("Invalid number of arguments ({} for {} expected)", num_args, check_ct));
+                }
+
                 break;
             }
             case opcode_t::RETURN:
             {
+                DEBUG_MSG("RETURN");
                 break;
             }
             case opcode_t::FINISH:

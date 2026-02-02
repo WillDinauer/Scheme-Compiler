@@ -113,7 +113,7 @@ enum opcode_t : uint8_t {
     VEC_APPEND = 0x20,
 
     // Function calls
-    ALLOC_LAM = 0x21,
+    ALLOC_CLO = 0x21,
     FUNCALL = 0x22,
     RETURN = 0x23,
 };

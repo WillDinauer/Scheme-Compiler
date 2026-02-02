@@ -4,6 +4,17 @@ from parser import scheme_parse, Character, String
 
 LOG_TAG = "[COMPILER]"
 
+BUILTINS = {
+    "integer->char", "char->integer", 
+    "null?", "zero?", "not", "integer?", "boolean?", 
+    "car", "cdr", "cons",
+    "add1", "sub1", "+", "-", "*", "<", "=", 
+    "if", "let", "begin", 
+    "string", "string-ref", "string-set!", "string-append", 
+    "vector", "vector-ref", "vector-set!", "vector-append", 
+    "lambda"
+}
+
 # We are assuming 64-bit
 SYSTEM_TYPE =   64
 OP_LEN =        8
@@ -61,6 +72,7 @@ class I(enum.IntEnum):
     VEC_APPEND = enum.auto()
 
     # Function calls
+    ALLOC_CLO = enum.auto()
     FUNCALL = enum.auto()
     RETURN = enum.auto()
 
@@ -111,30 +123,45 @@ def validate_args(expr, num_args):
         error_msg = f"Invalid usage of function '{expr[0]}': {num_args} args expected."
         compiler_error(error_msg)
 
+def validate_let(expr):
+    form_error_str = f"'let' must be of form: (let ((symbol_1 value_2) ... (symbol_n value_n)) expr_1 ... expr_n)"
+    # Check length of expression
+    if len(expr) < 3:
+        compiler_error(form_error_str)
+
+    binding_list = expr[1]
+    if not isinstance(binding_list, list):
+            compiler_error(f"Bad let: Binding list is not a list - {binding_list}")
+    bound = set()
+        
+    # iterate through bindings
+    for binding in binding_list:
+    # Validate individual binding
+        if not isinstance(binding, list) or len(binding) != 2:
+            compiler_error(f"Bad let: Invalid binding '{binding}' - bindings are of form (symbol value)")
+        variable_name = binding[0]
+
+        # Validate binding variable
+        if not isinstance(variable_name, str):
+            compiler_error(f"Bad let: Trying to bind non-str variable '{variable_name}'")
+        if variable_name in bound:
+            compiler_error(f"Bad let: local variable '{variable_name}' being bound twice in single let expr.")
+        bound.add(variable_name)
+    
+    return bound
+
 class Compiler:
     def __init__(self):
         self.code = []
 
+    # This function assumes we have already validated the let (with a call to 'validate_let')
     def create_new_environment(self, environment, binding_list) -> dict:
         num_bindings = len(binding_list)
         new_environment = {}
 
-        # binding list must be a list
-        if not isinstance(binding_list, list):
-            compiler_error(f"Bad let: Binding list is not a list - {binding_list}")
-        
         # iterate through bindings
         for i, binding in enumerate(binding_list):
-            # Validate individual binding
-            if not isinstance(binding, list) or len(binding) != 2:
-                compiler_error(f"Bad let: Invalid binding '{binding}' - bindings are of form (symbol value)")
             variable_name = binding[0]
-
-            # Validate binding variable
-            if not isinstance(variable_name, str):
-                compiler_error(f"Bad let: Trying to bind non-str variable '{variable_name}'")
-            if variable_name in new_environment:
-                compiler_error(f"Bad let: local variable '{variable_name}' being bound twice in single let expr.")
             new_environment[variable_name] = num_bindings - i - 1   # Sub 1 to 0-index
 
             # Bindings take 1 argument (their value)
@@ -168,6 +195,9 @@ class Compiler:
     
     def compile_string(self, char_arr, environment):
         self.compile_list(char_arr, I.ALLOC_STR, environment)
+
+    def compile_lambda(self, expr, environment):
+        pass
     
     def general_fn_emit(self, expr, n_args, opcode, environment):
         validate_args(expr, n_args)
@@ -289,10 +319,7 @@ class Compiler:
 
                     # n-ary functions
                     case "let":
-                        form_error_str = f"'let' must be of form: (let ((symbol_1 value_2) ... (symbol_n value_n)) expr_1 ... expr_n)"
-                        # Check length of expression
-                        if len(expr) < 3:
-                            compiler_error(form_error_str)
+                        validate_let(expr)
                         bindings = expr[1]
                         
                         # Handle bindings
@@ -330,6 +357,9 @@ class Compiler:
                     case "vector-append":
                         self.compile_list(expr[1:], I.VEC_APPEND, environment)
 
+                    # Lambda
+                    case "lambda":
+                        self.compile_lambda(expr[1:], environment)
 
                     case _:
                         compiler_error(f"Calling unbound/undefined '{func_name}' as a function.")
@@ -354,7 +384,6 @@ class Compiler:
         self.compile(expr[0], self.update_indices(len(args)))
 
         self.code.append(I.FUNCALL)
-
         self.code.append(I.RETURN)
 
     def write_to_stream(self, f):
@@ -372,6 +401,62 @@ class Compiler:
     def finish(self):
         self.code.append(I.FINISH)
 
+def lift_lambdas(expr, bound: set, free: set):
+    match expr:
+        case int() | Character() | String():
+            return
+        case str() if expr in bound or expr in BUILTINS:
+            return
+        case str():
+            free.add(expr)
+            return
+        case list():
+            # Empty list
+            if len(expr) == 0:
+                return
+            
+            # Function call
+            match expr[0]:
+                case "lambda":
+                    validate_args(expr, 2)
+                    local_bound = set()
+                    local_free = set()
+                    
+                    # Bind lambda args
+                    for variable in expr[1]:
+                        if not isinstance(variable, str):
+                            compiler_error(f"Non-str variable in lambda: {variable}") 
+                        local_bound.add(variable)
+
+                    # Recurse
+                    lift_lambdas(expr[2], local_bound, local_free)
+                    
+                    # Add all truly free variables to the structure
+                    free_vars = []
+                    for variable in local_free:
+                        if variable not in local_bound:
+                            free_vars.append(variable)
+
+                        # Propagate free vars up
+                        if variable not in bound:
+                            free.add(variable)
+                    expr.append(free_vars)
+                case "let":
+                    # Validate the let and add the bindings to the bound set
+                    let_bindings = validate_let(expr)
+                    sub_bound = bound.union(let_bindings)
+
+                    # Recurse over let statements
+                    for sub_expr in expr[2:]:
+                        lift_lambdas(sub_expr, sub_bound, free)
+
+                case _:
+                    for sub_expr in expr:
+                        lift_lambdas(sub_expr, bound, free)
+        case _:
+            raise NotImplementedError(expr)
+                    
+
 def compile_program():
     # Parse the Scheme file (from stdin)
     source = sys.stdin.read()
@@ -380,6 +465,9 @@ def compile_program():
     # Compile all functions at the root of the file
     compiler = Compiler()
     for i, function in enumerate(program):
+        lift_lambdas(function, set(), set())
+        print(function)
+        return
         compiler.compile(function, {})
 
         # Drop value (except for the last function)
