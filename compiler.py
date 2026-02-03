@@ -237,11 +237,14 @@ class Compiler:
         jump_length = len(self.code) - function_start
         self.code[function_start-1] = box_fixnum(jump_length)
 
+        # Push the function addr (code index)
+        self.code.append(box_fixnum(function_start))
+
         # Construct vector of free args and add n_args
         self.compile_vector(free_vars, environment)
         self.code.append(box_fixnum(len(args)))
 
-        # Closure captures n_args and vector of free arguments
+        # Closure captures n_args, vector of free arguments, and function addr
         self.code.append(I.ALLOC_CLO)
         
     
@@ -425,7 +428,7 @@ class Compiler:
         # Compile args
         for i, arg in enumerate(args):
             self.compile(arg, self.update_indices(environment, i))
-            
+
         # Load lambda or function call
         self.compile(expr[0], self.update_indices(environment, len(args)))
 

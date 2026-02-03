@@ -22,6 +22,10 @@ if [[ "$1" == "tests" ]]; then
     # Build the interpreter
     echo -e "${BLUE} -- BUILDING INTERPRETER -- ${NC}"
     make clean && make
+    if [[ $? -ne 0 ]]; then
+        echo -e "${RED} -- BUILD FAILED -- ${NC}"
+        exit -1
+    fi
     echo -e "${GREEN} -- BUILD SUCCEEDED -- ${NC}"
     echo
 

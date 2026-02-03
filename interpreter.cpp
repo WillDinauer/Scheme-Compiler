@@ -184,6 +184,21 @@ std::string vector_to_string(uint64_t value) {
     return res;
 }
 
+// Convert a closure to a string for printing/debugging
+std::string closure_to_string(uint64_t value) {
+    type_check_or_fail(value, VT::CLOSURE);
+    strip_tag(value);
+    uint64_t* ptr = (uint64_t *) value;
+
+    // Capture args and vector
+    std::string res = "[";
+    int64_t n_args = resolve_fixnum(*ptr);
+    ptr += WORD_LEN;
+    res += std::to_string(n_args) + " args, free variables -> " 
+        +  vector_to_string(*ptr) + "]";
+    return res;
+}
+
 // Convert true/false to #t or #f, respectively
 std::string cpp_bool_to_scheme_bool(bool value) {
     return value ? "#t" : "#f";
@@ -217,6 +232,9 @@ std::string value_to_string(uint64_t value, bool include_type) {
             break;
         case VT::VECTOR:
             v_string = vector_to_string(value);
+            break;
+        case VT::CLOSURE:
+            v_string = closure_to_string(value);
             break;
         case VT::UNSPECIFIED:
             v_string = "unspecified";
@@ -769,6 +787,26 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 stk.push(result);
                 break;
             }
+            case opcode_t::ALLOC_CLO:
+            {
+                DEBUG_MSG("ALLOC_CLO");
+                // # args and vector passed via stack
+                uint64_t args_ptr = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t vec_ptr = stk.pop_and_check_type(VT::VECTOR);
+                uint64_t addr_ptr = stk.pop_and_check_type(VT::FIXNUM);
+                
+                // Closure reference
+                uint64_t result = (uint64_t) heap_ptr | CLOSURE_TAG;
+                
+                // Write the # of args and the vector ref to the heap
+                heap_write_word(args_ptr);
+                heap_write_word(vec_ptr);
+                heap_write_word(addr_ptr);
+
+                // Push the addr of the closure
+                stk.push(result);
+                break;
+            }
             case opcode_t::FUNCALL:
             {
                 DEBUG_MSG("FUNCALL");
@@ -787,6 +825,31 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                     throw std::runtime_error(std::format("Invalid number of arguments ({} for {} expected)", num_args, check_ct));
                 }
 
+                // Resolve vector
+                closure += WORD_LEN;
+                uint64_t vec_ptr = *closure;
+                type_check_or_fail(vec_ptr, VT::VECTOR);
+                strip_tag(vec_ptr);
+                uint64_t* vector = (uint64_t *) vec_ptr;
+
+                // Push free variable values to the stack
+                int64_t length = resolve_fixnum(*vector);
+                for (int64_t i = 0; i < length; i++) {
+                    vector += WORD_LEN;
+                    stk.push(*vector);
+                }
+
+                // Push the closure again
+                tagged_closure = tagged_closure | CLOSURE_TAG;
+                stk.push(tagged_closure);
+
+                // Push the PC as the return addr
+                stk.push(pc);
+
+                // Jump the PC to the function start
+                closure += WORD_LEN;
+                int64_t pc_index = resolve_fixnum(*closure);
+                pc = pc_index;
                 break;
             }
             case opcode_t::RETURN:
