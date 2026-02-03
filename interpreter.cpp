@@ -121,7 +121,9 @@ void strip_tag(uint64_t& value) {
 void type_check_or_fail(uint64_t value, VT desired_type) {
     VT type = resolve_type(value);
     if (type != desired_type) {
-        throw std::runtime_error("Type check failed."); // This is a non-descript error message and should be fixed...
+        std::string expected = type_to_string(desired_type);
+        std::string got = type_to_string(type);
+        throw std::runtime_error(std::format("Type check failed (Expected: '{}' Got: '{}')", expected, got));
     }
 }
 
@@ -194,7 +196,7 @@ std::string closure_to_string(uint64_t value) {
     std::string res = "[";
     int64_t n_args = resolve_fixnum(*ptr);
     ptr += WORD_LEN;
-    res += std::to_string(n_args) + " args, free variables -> " 
+    res += std::to_string(n_args) + " args, fv -> " 
         +  vector_to_string(*ptr) + "]";
     return res;
 }
@@ -522,8 +524,10 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::JMP:
             {
                 DEBUG_MSG("JMP");
-                uint64_t jump_length = typed_read_word(pc, code, VT::FIXNUM);
-                pc += resolve_fixnum(jump_length);
+                uint64_t jump_ptr = typed_read_word(pc, code, VT::FIXNUM);
+                int64_t jump_length = resolve_fixnum(jump_ptr);
+                DEBUG_MSG(jump_length);
+                pc += jump_length;
                 break;
             }
             case opcode_t::JIF:
@@ -811,7 +815,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             {
                 DEBUG_MSG("FUNCALL");
                 // Get the arg count immediate
-                uint64_t tagged_arg_ct = typed_read_word(pc, code, VT::FIXNUM);
+                uint64_t tagged_arg_ct = stk.pop_and_check_type(VT::FIXNUM);
                 int64_t num_args = resolve_fixnum(tagged_arg_ct);
 
                 // Get the closure
@@ -844,7 +848,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 stk.push(tagged_closure);
 
                 // Push the PC as the return addr
-                stk.push(pc);
+                stk.push(create_fixnum_ptr(pc));
 
                 // Jump the PC to the function start
                 closure += WORD_LEN;
@@ -855,6 +859,34 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::RETURN:
             {
                 DEBUG_MSG("RETURN");
+                // Pop top 3 off stack
+                uint64_t ret_val = stk.pop();
+                uint64_t ret_addr = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t closure_ptr = stk.pop_and_check_type(VT::CLOSURE);
+
+                // Resolve closure
+                strip_tag(closure_ptr);
+                uint64_t* closure = (uint64_t*) closure_ptr;
+
+                // Get # of args and # of free vars
+                int64_t n_args = resolve_fixnum(*closure);
+                closure += WORD_LEN;
+                uint64_t vec_ptr = *closure;
+                strip_tag(vec_ptr);
+                uint64_t* vec = (uint64_t*) vec_ptr;
+                int64_t n_free = resolve_fixnum(*vec);
+
+                // Drop args and free vars
+                for (int64_t i = 0; i < n_args + n_free; i++) {
+                    stk.pop();
+                }
+                
+                // Put the return value back on the stack
+                stk.push(ret_val);
+
+                // Jump the pc
+                int64_t pc_index = resolve_fixnum(ret_addr);
+                pc = pc_index;
                 break;
             }
             case opcode_t::FINISH:

@@ -235,13 +235,15 @@ class Compiler:
 
         # Update placeholder jump
         jump_length = len(self.code) - function_start
-        self.code[function_start-1] = box_fixnum(jump_length)
+        self.code[function_start-1] = box_fixnum(jump_length * OP_LEN)
 
         # Push the function addr (code index)
-        self.code.append(box_fixnum(function_start))
+        self.code.append(I.LOAD64)
+        self.code.append(box_fixnum(function_start * OP_LEN))
 
         # Construct vector of free args and add n_args
         self.compile_vector(free_vars, environment)
+        self.code.append(I.LOAD64)
         self.code.append(box_fixnum(len(args)))
 
         # Closure captures n_args, vector of free arguments, and function addr
@@ -408,7 +410,7 @@ class Compiler:
 
                     # Lambda
                     case "lambda":
-                        self.compile_lambda(expr[1:], environment)
+                        self.compile_lambda(expr, environment)
 
                     case _:
                         compiler_error(f"Calling unbound/undefined '{func_name}' as a function.")
@@ -431,6 +433,10 @@ class Compiler:
 
         # Load lambda or function call
         self.compile(expr[0], self.update_indices(environment, len(args)))
+
+        # Load the # of args onto the stack
+        self.code.append(I.LOAD64)
+        self.code.append(box_fixnum(len(args)))
 
         # Make the call
         self.code.append(I.FUNCALL)
@@ -497,6 +503,10 @@ def lift_lambdas(expr, bound: set, free: set):
                     # Validate the let and add the bindings to the bound set
                     let_bindings = validate_let(expr)
                     sub_bound = bound.union(let_bindings)
+                    
+                    # Lift lambdas in let bindings
+                    for pair in expr[1]:
+                        lift_lambdas(pair[1], bound, free)
 
                     # Recurse over let statements
                     for sub_expr in expr[2:]:
