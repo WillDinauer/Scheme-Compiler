@@ -198,8 +198,8 @@ class Compiler:
 
     def compile_lambda(self, expr, environment):
         args = expr[1]
-        body = expr[2]
-        free_vars = expr[3]
+        free_vars = expr[2]
+        body = expr[3]
 
         # Jump with placeholder value
         self.code.append(I.JMP)
@@ -242,7 +242,7 @@ class Compiler:
         self.code.append(box_fixnum(function_start * OP_LEN))
 
         # Construct vector of free args and add n_args
-        self.compile_vector(free_vars, environment)
+        self.compile_vector(free_vars, self.update_indices(environment, 1))
         self.code.append(I.LOAD64)
         self.code.append(box_fixnum(len(args)))
 
@@ -498,7 +498,7 @@ def lift_lambdas(expr, bound: set, free: set):
 
                     # Sort for determinism
                     free_vars.sort()
-                    expr.append(free_vars)
+                    expr.insert(2, free_vars)
                 case "let":
                     # Validate the let and add the bindings to the bound set
                     let_bindings = validate_let(expr)

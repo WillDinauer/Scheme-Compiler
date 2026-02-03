@@ -196,8 +196,10 @@ std::string closure_to_string(uint64_t value) {
     std::string res = "[";
     int64_t n_args = resolve_fixnum(*ptr);
     ptr += WORD_LEN;
-    res += std::to_string(n_args) + " args, fv -> " 
-        +  vector_to_string(*ptr) + "]";
+    res += std::to_string(n_args) + "a, fv: " 
+        +  vector_to_string(*ptr) + ", r: ";
+    ptr += WORD_LEN;
+    res += std::to_string(resolve_fixnum(*ptr)) + "]";
     return res;
 }
 
@@ -826,7 +828,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 // Validate # of arguments
                 int64_t check_ct = resolve_fixnum(*closure);
                 if (num_args != check_ct) {
-                    throw std::runtime_error(std::format("Invalid number of arguments ({} for {} expected)", num_args, check_ct));
+                    throw std::runtime_error(std::format("Invalid number of arguments passed to lambda expr...({} for {} expected)", num_args, check_ct));
                 }
 
                 // Resolve vector
