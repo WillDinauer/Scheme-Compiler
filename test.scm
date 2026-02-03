@@ -1,1 +1,1 @@
-(lambda (y) (cons (let ((z 1)) (lambda () (+ y z))) (lambda () (- a b))))
+(lambda (y) (cons (let ((z 1)) (lambda () (+ y z))) (lambda (a) (- a b))))

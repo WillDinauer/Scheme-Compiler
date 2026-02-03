@@ -197,7 +197,53 @@ class Compiler:
         self.compile_list(char_arr, I.ALLOC_STR, environment)
 
     def compile_lambda(self, expr, environment):
-        pass
+        args = expr[1]
+        body = expr[2]
+        free_vars = expr[3]
+
+        # Jump with placeholder value
+        self.code.append(I.JMP)
+        self.code.append(box_fixnum(0))
+        function_start = len(self.code)
+
+        # Create theoretical environment to compile lambda within
+        lambda_environment = {}
+        i = 2   # Space for return and closure obj on stack
+        for x in range(len(free_vars)-1, -1, -1):# Free vars
+            variable = free_vars[x]
+            lambda_environment[variable] = i
+            i += 1
+        for x in range(len(args)-1, -1, -1): # Lambda arguments
+            variable = args[x]
+            lambda_environment[variable] = i
+            i += 1
+        self.compile(body, lambda_environment)
+
+        # At this point, top of stack is:
+        #   1.) Value to return
+        #   2.) Return Address (or...pc index)
+        #   3.) Closure ref
+        #   4...N.) Free variables and Args
+        # 
+        # Return will:
+        # -> pop + save top 3 of stack
+        # -> Get N from Closure ref.
+        # -> drop N values (pop)
+        # -> push ret value 
+        # -> jump to Ret Address (pc index)
+        self.code.append(I.RETURN)
+
+        # Update placeholder jump
+        jump_length = len(self.code) - function_start
+        self.code[function_start-1] = box_fixnum(jump_length)
+
+        # Construct vector of free args and add n_args
+        self.compile_vector(free_vars, environment)
+        self.code.append(box_fixnum(len(args)))
+
+        # Closure captures n_args and vector of free arguments
+        self.code.append(I.ALLOC_CLO)
+        
     
     def general_fn_emit(self, expr, n_args, opcode, environment):
         validate_args(expr, n_args)
@@ -379,12 +425,12 @@ class Compiler:
         # Compile args
         for i, arg in enumerate(args):
             self.compile(arg, self.update_indices(environment, i))
-
+            
         # Load lambda or function call
-        self.compile(expr[0], self.update_indices(len(args)))
+        self.compile(expr[0], self.update_indices(environment, len(args)))
 
+        # Make the call
         self.code.append(I.FUNCALL)
-        self.code.append(I.RETURN)
 
     def write_to_stream(self, f):
         # human-readable
@@ -425,7 +471,7 @@ def lift_lambdas(expr, bound: set, free: set):
                     # Bind lambda args
                     for variable in expr[1]:
                         if not isinstance(variable, str):
-                            compiler_error(f"Non-str variable in lambda: {variable}") 
+                            compiler_error(f"Non-str variable in lambda: {variable}")
                         local_bound.add(variable)
 
                     # Recurse
@@ -440,6 +486,9 @@ def lift_lambdas(expr, bound: set, free: set):
                         # Propagate free vars up
                         if variable not in bound:
                             free.add(variable)
+
+                    # Sort for determinism
+                    free_vars.sort()
                     expr.append(free_vars)
                 case "let":
                     # Validate the let and add the bindings to the bound set
@@ -466,8 +515,6 @@ def compile_program():
     compiler = Compiler()
     for i, function in enumerate(program):
         lift_lambdas(function, set(), set())
-        print(function)
-        return
         compiler.compile(function, {})
 
         # Drop value (except for the last function)
