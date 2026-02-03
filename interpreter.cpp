@@ -192,7 +192,7 @@ std::string closure_to_string(uint64_t value) {
     strip_tag(value);
     uint64_t* ptr = (uint64_t *) value;
 
-    // Capture args and vector
+    // Capture args, vector, return
     std::string res = "[";
     int64_t n_args = resolve_fixnum(*ptr);
     ptr += WORD_LEN;

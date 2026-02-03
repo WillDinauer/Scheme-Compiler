@@ -294,7 +294,7 @@ class Compiler:
                 # List as a function call (only lambda can do this atm)
                 if isinstance(expr[0], list):
                     # Make the function call
-                    self.compile_function(expr, self.update_indices(environment, 1))
+                    self.compile_function(expr, environment)
                     return
                 
                 # Function call
