@@ -1,15 +1,15 @@
 CXX=g++
 TARGET=interpreter
 SRC=interpreter.cpp
-FLAGS= -Wall -Wextra -Werror -Wpedantic -Wvla -Wshadow -fsanitize=address,undefined -std=c++20 -g -fdiagnostics-color=always
+CXXFLAGS= -Wall -Wextra -Werror -Wpedantic -Wvla -Wshadow -fsanitize=address,undefined -std=c++20 -g -fdiagnostics-color=always
 
 all: $(TARGET)
 
 $(TARGET): $(SRC)
-	$(CXX) $(FLAGS) $(SRC) -o $(TARGET)
+	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET)
 
 debug: $(SRC)
-	$(CXX) $(FLAGS) -DDEBUG $(SRC) -o $(TARGET)
+	$(CXX) $(CXXFLAGS) -DDEBUG $(SRC) -o $(TARGET)
 
 clean:
 	rm -f $(TARGET) code.txt compiled.bc
