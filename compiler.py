@@ -73,7 +73,6 @@ class I(enum.IntEnum):
 
     # CLOSURE
     ALLOC_CLO = enum.auto()
-    CLO_REF = enum.auto()
 
     # Function calls
     FUNCALL = enum.auto()
@@ -191,21 +190,16 @@ class Compiler:
 
         # Add the binding to the environment
         binding = binding_list[0]
-        var_name = binding[0]
+        lambda_name = binding[0]
         expr = binding[1]
 
         # Compile the binding - this is assumed to be a lambda
-        usage_indices = self.compile_rec_lambda(expr, var_name, environment)
+        self.compile_rec_lambda(expr, lambda_name, environment)
 
         # Add binding and shift existing environment by 1 for new binding
-        new_environment[var_name] = 0
+        new_environment[lambda_name] = 0
         for key, value in environment.items():
             new_environment[key] = value + num_bindings
-
-        # Update placeholder free-variables in closure
-        for idx in usage_indices:
-            self.compile(["vector-set!", ["closure-ref", var_name, 1], idx, var_name], new_environment)
-            self.code.append(I.DROP)
 
         return new_environment
     
@@ -255,7 +249,7 @@ class Compiler:
     def compile_string(self, char_arr, environment):
         self.compile_list(char_arr, I.ALLOC_STR, environment)
 
-    def compile_lambda_body(self, args, body, free_vars):
+    def compile_lambda_body(self, args, body, free_vars, lambda_name=None):
         # Jump with placeholder value
         self.code.append(I.JMP)
         self.code.append(box_fixnum(0))
@@ -263,6 +257,8 @@ class Compiler:
 
         # Create theoretical environment to compile lambda within
         lambda_environment = {}
+        if lambda_name != None:
+            lambda_environment[lambda_name] = 1
         i = 2   # Space for return and closure obj on stack
         for x in range(len(free_vars)-1, -1, -1):# Free vars
             variable = free_vars[x]
@@ -315,13 +311,16 @@ class Compiler:
         # Closure captures n_args, vector of free arguments, and function addr
         self.code.append(I.ALLOC_CLO)
 
-    def compile_rec_lambda(self, expr, var_name, environment):
+    def compile_rec_lambda(self, expr, lambda_name, environment):
         args = expr[1]
         free_vars = expr[2]
         body = expr[3]
 
+        # Do not consider the name to be a free var...
+        free_vars.remove(lambda_name)
+
         # Compile the lambda body as normal
-        function_start = self.compile_lambda_body(args, body, free_vars)
+        function_start = self.compile_lambda_body(args, body, free_vars, lambda_name)
 
         # Push the function addr (code index)
         self.code.append(I.LOAD64)
@@ -332,7 +331,7 @@ class Compiler:
         for i in range(len(free_vars) - 1, -1, -1):
             el = free_vars[i]
             # Emit placeholder load for var_name
-            if el == var_name:
+            if el == lambda_name:
                 usage_indices.append(i)
                 self.code.append(I.LOAD64)
                 self.code.append(box_fixnum(0))
@@ -347,8 +346,6 @@ class Compiler:
 
         # Closure captures n_args, vector of free arguments, and function addr
         self.code.append(I.ALLOC_CLO)
-
-        return usage_indices
     
     def general_fn_emit(self, expr, n_args, opcode, environment):
         validate_args(expr, n_args)

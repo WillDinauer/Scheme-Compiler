@@ -822,19 +822,6 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 stk.push(result);
                 break;
             }
-            case opcode_t::CLO_REF:
-            {
-                DEBUG_MSG("CLO_REF");
-                // Get closure and index to grab
-                uint64_t idx_ptr = stk.pop_and_check_type(VT::FIXNUM);
-                uint64_t vec_ptr = stk.pop_and_check_type(VT::CLOSURE);
-
-                // Get the object at the index and push it
-                uint64_t *closure_slot = get_closure_ptr(idx_ptr, vec_ptr);
-                uint64_t result = *closure_slot;
-                stk.push(result);
-                break;
-            }
             case opcode_t::FUNCALL:
             {
                 DEBUG_MSG("FUNCALL");
