@@ -195,10 +195,8 @@ std::string closure_to_string(uint64_t value) {
     // Capture args, vector, return
     std::string res = "[";
     int64_t n_args = resolve_fixnum(*ptr);
-    ptr += WORD_LEN;
-    res += std::to_string(n_args) + "a, fv: " 
-        +  vector_to_string(*ptr) + ", r: ";
-    ptr += WORD_LEN;
+    res += std::to_string(n_args) + "a, ret: ";
+    ptr += WORD_LEN * 2;
     res += std::to_string(resolve_fixnum(*ptr)) + "]";
     return res;
 }
@@ -206,12 +204,6 @@ std::string closure_to_string(uint64_t value) {
 // Convert true/false to #t or #f, respectively
 std::string cpp_bool_to_scheme_bool(bool value) {
     return value ? "#t" : "#f";
-}
-
-void validate_allocation(uint64_t size) {
-    if (heap_ptr + size > heap_end) {
-        throw std::runtime_error("Ran out of heap space.");
-    }
 }
 
 // Convert value to [VALUE - resolved_value] pair
@@ -277,6 +269,12 @@ uint64_t typed_read_word(size_t& pc, std::vector<uint8_t>& code, VT type) {
     return value;
 }
 
+void validate_allocation(uint64_t size) {
+    if (heap_ptr + size > heap_end) {
+        throw std::runtime_error("Ran out of heap space.");
+    }
+}
+
 // Write a word to the heap
 void heap_write_word(uint64_t value) {
     validate_allocation(WORD_LEN);
@@ -314,7 +312,6 @@ uint64_t *get_vector_ptr(uint64_t idx_ptr, uint64_t vec_ptr) {
         strip_tag(vec_ptr);
         int64_t idx = resolve_fixnum(idx_ptr);
         uint64_t *vec_slot = (uint64_t *) vec_ptr;
-        std::cout << "start: " << vec_slot << std::endl;
         int64_t length = resolve_fixnum(*vec_slot);
         if (idx >= length || idx < 0) {
             throw std::runtime_error(std::format("Invalid vector index {} for length {}", idx, length));
@@ -322,8 +319,20 @@ uint64_t *get_vector_ptr(uint64_t idx_ptr, uint64_t vec_ptr) {
 
         // Index into the vector
         vec_slot += (WORD_LEN * (1 + idx));
-        std::cout << "end: " << vec_slot << std::endl;
         return vec_slot;
+}
+
+uint64_t *get_closure_ptr(uint64_t idx_ptr, uint64_t closure_ptr) {
+    // Resolve to true values
+    strip_tag(closure_ptr);
+    uint64_t idx = resolve_fixnum(idx_ptr);
+    if (idx >= CLOSURE_LEN || idx < 0) {
+        throw std::runtime_error(std::format("Invalid closure index {} for length {}", idx, CLOSURE_LEN));
+    }
+    
+    uint64_t *clo_slot = (uint64_t *) closure_ptr;
+    clo_slot += (WORD_LEN * idx);
+    return clo_slot;
 }
 
 // Run the code
@@ -499,7 +508,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
 
                 // Value becomes an index to reach into on the stack
                 value = resolve_fixnum(value);
-                #ifdef DEBUG_ACTIVE
+                #ifdef DEBUG
                     std::cout << "Get Index: " << value << std::endl;
                 #endif
 
@@ -810,6 +819,19 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 heap_write_word(addr_ptr);
 
                 // Push the addr of the closure
+                stk.push(result);
+                break;
+            }
+            case opcode_t::CLO_REF:
+            {
+                DEBUG_MSG("CLO_REF");
+                // Get closure and index to grab
+                uint64_t idx_ptr = stk.pop_and_check_type(VT::FIXNUM);
+                uint64_t vec_ptr = stk.pop_and_check_type(VT::CLOSURE);
+
+                // Get the object at the index and push it
+                uint64_t *closure_slot = get_closure_ptr(idx_ptr, vec_ptr);
+                uint64_t result = *closure_slot;
                 stk.push(result);
                 break;
             }

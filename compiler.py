@@ -71,8 +71,11 @@ class I(enum.IntEnum):
     VEC_SET = enum.auto()
     VEC_APPEND = enum.auto()
 
-    # Function calls
+    # CLOSURE
     ALLOC_CLO = enum.auto()
+    CLO_REF = enum.auto()
+
+    # Function calls
     FUNCALL = enum.auto()
     RETURN = enum.auto()
 
@@ -82,6 +85,11 @@ class SI:
         self.mask = mask
         self.tag = tag
         self.shift = shift
+
+class LET_TYPE(enum.IntEnum):
+    DEFAULT=enum.auto()
+    REC=enum.auto()
+    STAR=enum.auto()
 
 # Mask/shift/tagging information for various types
 SHIFT_INFO = {
@@ -155,7 +163,7 @@ class Compiler:
         self.code = []
 
     # This function assumes we have already validated the let (with a call to 'validate_let')
-    def create_new_environment(self, environment, binding_list) -> dict:
+    def create_let_environment(self, environment, binding_list) -> dict:
         num_bindings = len(binding_list)
         new_environment = {}
 
@@ -164,7 +172,7 @@ class Compiler:
             variable_name = binding[0]
             new_environment[variable_name] = num_bindings - i - 1   # Sub 1 to 0-index
 
-            # Bindings take 1 argument (their value)
+            # Bindings take 1 argument (their value/expr)
             self.compile(binding[1], environment)
         
         for key, value in environment.items():
@@ -173,6 +181,57 @@ class Compiler:
                 new_environment[key] = value + num_bindings
         
         return new_environment
+    
+    def create_letrec_environment(self, environment, binding_list) -> dict:
+        # Note...this check is for letrec taking a temporary single arg
+        num_bindings = len(binding_list)
+        if num_bindings != 1:
+            compiler_error(f"letrec must have a single binding at the moment (received {num_bindings})")
+        new_environment = {}
+
+        # Add the binding to the environment
+        binding = binding_list[0]
+        var_name = binding[0]
+        expr = binding[1]
+
+        # Compile the binding - this is assumed to be a lambda
+        usage_indices = self.compile_rec_lambda(expr, var_name, environment)
+
+        # Add binding and shift existing environment by 1 for new binding
+        new_environment[var_name] = 0
+        for key, value in environment.items():
+            new_environment[key] = value + num_bindings
+
+        # Update placeholder free-variables in closure
+        for idx in usage_indices:
+            self.compile(["vector-set!", ["closure-ref", var_name, 1], idx, var_name], new_environment)
+            self.code.append(I.DROP)
+
+        return new_environment
+    
+    def compile_let(self, expr, environment, let_type):
+        validate_let(expr)
+        bindings = expr[1]
+
+        # Handle bindings
+        match let_type:
+            case LET_TYPE.DEFAULT:
+                environment = self.create_let_environment(environment, bindings)
+            case LET_TYPE.REC:
+                environment = self.create_letrec_environment(environment, bindings)
+            case LET_TYPE.STAR:
+                compiler_error("let* unimplemented.")
+            case _:
+                compiler_error("unimplemented let type.")
+        
+
+        # Compile sub expressions
+        sub_expressions = expr[2:]
+        self.compile_subexprs(sub_expressions, environment)
+
+        # Tear down locals
+        for _ in range(len(bindings)):
+            self.code.append(I.SQUASH)
 
     def update_indices(self, environment, shift) -> dict:
         new_environment = environment.copy()
@@ -196,11 +255,7 @@ class Compiler:
     def compile_string(self, char_arr, environment):
         self.compile_list(char_arr, I.ALLOC_STR, environment)
 
-    def compile_lambda(self, expr, environment):
-        args = expr[1]
-        free_vars = expr[2]
-        body = expr[3]
-
+    def compile_lambda_body(self, args, body, free_vars):
         # Jump with placeholder value
         self.code.append(I.JMP)
         self.code.append(box_fixnum(0))
@@ -237,6 +292,17 @@ class Compiler:
         jump_length = len(self.code) - function_start
         self.code[function_start-1] = box_fixnum(jump_length * OP_LEN)
 
+        # Return the function start
+        return function_start
+
+    def compile_lambda(self, expr, environment):
+        args = expr[1]
+        free_vars = expr[2]
+        body = expr[3]
+
+        # Compile the lambda body
+        function_start = self.compile_lambda_body(args, body, free_vars)
+
         # Push the function addr (code index)
         self.code.append(I.LOAD64)
         self.code.append(box_fixnum(function_start * OP_LEN))
@@ -248,7 +314,41 @@ class Compiler:
 
         # Closure captures n_args, vector of free arguments, and function addr
         self.code.append(I.ALLOC_CLO)
-        
+
+    def compile_rec_lambda(self, expr, var_name, environment):
+        args = expr[1]
+        free_vars = expr[2]
+        body = expr[3]
+
+        # Compile the lambda body as normal
+        function_start = self.compile_lambda_body(args, body, free_vars)
+
+        # Push the function addr (code index)
+        self.code.append(I.LOAD64)
+        self.code.append(box_fixnum(function_start * OP_LEN))
+
+        # Compile free_vars (with potential placeholders)
+        usage_indices = []
+        for i in range(len(free_vars) - 1, -1, -1):
+            el = free_vars[i]
+            # Emit placeholder load for var_name
+            if el == var_name:
+                usage_indices.append(i)
+                self.code.append(I.LOAD64)
+                self.code.append(box_fixnum(0))
+            else:
+                self.compile(el, self.update_indices(environment, len(free_vars) - 1 - i))
+        self.code.append(I.ALLOC_VEC)
+        self.code.append(box_fixnum(len(free_vars)))
+
+        # Load n_args
+        self.code.append(I.LOAD64)
+        self.code.append(box_fixnum(len(args)))
+
+        # Closure captures n_args, vector of free arguments, and function addr
+        self.code.append(I.ALLOC_CLO)
+
+        return usage_indices
     
     def general_fn_emit(self, expr, n_args, opcode, environment):
         validate_args(expr, n_args)
@@ -370,19 +470,11 @@ class Compiler:
 
                     # n-ary functions
                     case "let":
-                        validate_let(expr)
-                        bindings = expr[1]
-                        
-                        # Handle bindings
-                        environment = self.create_new_environment(environment, bindings)
-                        
-                        # Compile all sub expressions
-                        sub_expressions = expr[2:]
-                        self.compile_subexprs(sub_expressions, environment)
-                        
-                        # Tear down local variables
-                        for _ in range(len(bindings)):
-                            emit(I.SQUASH)
+                        self.compile_let(expr, environment, LET_TYPE.DEFAULT)
+
+                    case "letrec":
+                        self.compile_let(expr, environment, LET_TYPE.REC)
+
                     case "begin":
                         # Compile all subexpressions
                         sub_expressions = expr[1:]
@@ -407,6 +499,10 @@ class Compiler:
                         self.general_fn_emit(expr, 3, I.VEC_SET, environment)
                     case "vector-append":
                         self.compile_list(expr[1:], I.VEC_APPEND, environment)
+
+                    # Closure function (internal)
+                    case "closure-ref":
+                        self.general_fn_emit(expr, 2, I.CLO_REF, environment)
 
                     # Lambda
                     case "lambda":
@@ -499,7 +595,7 @@ def lift_lambdas(expr, bound: set, free: set):
                     # Sort for determinism
                     free_vars.sort()
                     expr.insert(2, free_vars)
-                case "let":
+                case "let" | "letrec":
                     # Validate the let and add the bindings to the bound set
                     let_bindings = validate_let(expr)
                     sub_bound = bound.union(let_bindings)

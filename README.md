@@ -3,7 +3,7 @@
 ## Requirements
 
 - Python 3.10+ (for parser and compiler)
-- GCC 12+ with C++20 support (for building the interpreter)
+- GCC 12+ with C++20 support (for the interpreter)
 
 ## Building
 

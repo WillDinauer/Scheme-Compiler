@@ -12,6 +12,7 @@
 
 // # of bytes per word
 #define WORD_LEN      8
+#define CLOSURE_LEN   3
 
 // -- Pointer resolution information -- 
 // Primitives
@@ -112,10 +113,14 @@ enum opcode_t : uint8_t {
     VEC_SET = 0x1F,
     VEC_APPEND = 0x20,
 
-    // Function calls
+    // CLOSURE
     ALLOC_CLO = 0x21,
-    FUNCALL = 0x22,
-    RETURN = 0x23,
+    CLO_REF = 0x22,
+
+    // Function calls
+    FUNCALL = 0x23,
+    RETURN = 0x24,
+    
 };
 
 // Type resolution and checking
@@ -160,6 +165,10 @@ public:
 
     bool empty() {
         return s.empty();
+    }
+
+    size_t size() {
+        return s.size();
     }
 
     uint64_t pop() {
