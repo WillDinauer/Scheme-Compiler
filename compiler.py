@@ -316,8 +316,8 @@ class Compiler:
         free_vars = expr[2]
         body = expr[3]
 
-        # Do not consider the name to be a free var...
-        free_vars.remove(lambda_name)
+        if lambda_name in free_vars:
+            free_vars.remove(lambda_name)
 
         # Compile the lambda body as normal
         function_start = self.compile_lambda_body(args, body, free_vars, lambda_name)
@@ -497,10 +497,6 @@ class Compiler:
                     case "vector-append":
                         self.compile_list(expr[1:], I.VEC_APPEND, environment)
 
-                    # Closure function (internal)
-                    case "closure-ref":
-                        self.general_fn_emit(expr, 2, I.CLO_REF, environment)
-
                     # Lambda
                     case "lambda":
                         self.compile_lambda(expr, environment)
@@ -592,7 +588,7 @@ def lift_lambdas(expr, bound: set, free: set):
                     # Sort for determinism
                     free_vars.sort()
                     expr.insert(2, free_vars)
-                case "let" | "letrec":
+                case "let":
                     # Validate the let and add the bindings to the bound set
                     let_bindings = validate_let(expr)
                     sub_bound = bound.union(let_bindings)
@@ -601,6 +597,18 @@ def lift_lambdas(expr, bound: set, free: set):
                     for pair in expr[1]:
                         lift_lambdas(pair[1], bound, free)
 
+                    # Recurse over let statements
+                    for sub_expr in expr[2:]:
+                        lift_lambdas(sub_expr, sub_bound, free)
+                case "letrec":
+                    # Validate the letrec and add bindings to the bound set
+                    let_bindings = validate_let(expr)
+                    sub_bound = bound.union(let_bindings)
+
+                    # Lift lambdas in bindings, considering name to be bound
+                    for pair in expr[1]:
+                        lift_lambdas(pair[1], sub_bound, free)
+                    
                     # Recurse over let statements
                     for sub_expr in expr[2:]:
                         lift_lambdas(sub_expr, sub_bound, free)
