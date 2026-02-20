@@ -1,4 +1,4 @@
-(letrec ((fact
+(let ((fact
           (lambda (n)
             (letrec ((fact-iter
                       (lambda (n acc)
@@ -6,4 +6,4 @@
                             acc
                             (fact-iter (- n 1) (* acc n))))))
               (fact-iter n 1)))))
-  (fact 6))
+  (fact 3))

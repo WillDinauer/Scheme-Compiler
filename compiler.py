@@ -76,6 +76,7 @@ class I(enum.IntEnum):
 
     # Function calls
     FUNCALL = enum.auto()
+    TAILCALL = enum.auto()
     RETURN = enum.auto()
 
 # Container for shift/tagging information
@@ -268,7 +269,9 @@ class Compiler:
             variable = args[x]
             lambda_environment[variable] = i
             i += 1
-        self.compile(body, lambda_environment)
+
+        # Assume lambdas only take 1 expr. Hence, in_tail_pos=True
+        self.compile(body, lambda_environment, in_tail_pos=True)
 
         # At this point, top of stack is:
         #   1.) Value to return
@@ -357,13 +360,13 @@ class Compiler:
     
     def compile_subexprs(self, sub_expressions, environment):
         for i, sub_expr in enumerate(sub_expressions):
-            self.compile(sub_expr, environment)
+            self.compile(sub_expr, environment, in_tail_pos= (i == len(sub_expressions)-1))
 
             # Drop unused values
             if i < len(sub_expressions) - 1:
                 self.code.append(I.DROP)
         
-    def compile(self, expr, environment) -> list:
+    def compile(self, expr, environment, in_tail_pos=False) -> list:
         emit = self.code.append
         match expr:
             case bool():
@@ -391,13 +394,13 @@ class Compiler:
                 # List as a function call (only lambda can do this atm)
                 if isinstance(expr[0], list):
                     # Make the function call
-                    self.compile_function(expr, environment)
+                    self.compile_function(expr, environment, in_tail_pos)
                     return
                 
                 # Function call
                 func_name = expr[0]
                 if func_name in environment:
-                    self.compile_function(expr, environment)
+                    self.compile_function(expr, environment, in_tail_pos)
                     return
 
                 match func_name:
@@ -452,13 +455,13 @@ class Compiler:
                         ckpt1 = len(self.code)
 
                         # -- Then -- 
-                        self.compile(expr[2], environment)
+                        self.compile(expr[2], environment, in_tail_pos=True)
                         emit(I.JMP)
                         emit(box_fixnum(0))
                         ckpt2 = len(self.code)
 
                         # -- Else --
-                        self.compile(expr[3], environment)
+                        self.compile(expr[3], environment, in_tail_pos=True)
                         ckpt3 = len(self.code)
                         
                         # Update placeholder values
@@ -514,7 +517,7 @@ class Compiler:
                 else:
                     compiler_error(f"Use of undefined variable '{expr}'")
     
-    def compile_function(self, expr, environment):
+    def compile_function(self, expr, environment, in_tail_pos):
         args = expr[1:]
         # Compile args
         for i, arg in enumerate(args):
@@ -528,7 +531,10 @@ class Compiler:
         self.code.append(box_fixnum(len(args)))
 
         # Make the call
-        self.code.append(I.FUNCALL)
+        if in_tail_pos:
+            self.code.append(I.TAILCALL)
+        else:
+            self.code.append(I.FUNCALL)
 
     def write_to_stream(self, f):
         # human-readable

@@ -867,6 +867,12 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 pc = pc_index;
                 break;
             }
+            case opcode_t::TAILCALL:
+            {
+                DEBUG_MSG("TAILCALL");
+                throw std::runtime_error("tailcall unimplemented.");
+                break;
+            }
             case opcode_t::RETURN:
             {
                 DEBUG_MSG("RETURN");

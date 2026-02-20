@@ -118,8 +118,8 @@ enum opcode_t : uint8_t {
 
     // Function calls
     FUNCALL = 0x22,
-    RETURN = 0x23,
-    
+    TAILCALL = 0x23,
+    RETURN = 0x24,
 };
 
 // Type resolution and checking
