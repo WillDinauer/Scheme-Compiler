@@ -339,6 +339,7 @@ uint64_t *get_closure_ptr(uint64_t idx_ptr, uint64_t closure_ptr) {
 std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
     v_stack stk;
+    uint64_t closure_register = 0;
 
     while (pc < code.size()) {
         DEBUG_MSG(std::format("\npc: {}", pc));
@@ -822,6 +823,13 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 stk.push(result);
                 break;
             }
+            case opcode_t::GET_CLOSURE:
+            {
+                DEBUG_MSG("GET_CLOSURE");
+                type_check_or_fail(closure_register, VT::CLOSURE);
+                stk.push(closure_register);
+                break;
+            }
             case opcode_t::FUNCALL:
             {
                 DEBUG_MSG("FUNCALL");
@@ -854,10 +862,13 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                     stk.push(*vector);
                 }
 
-                // Place the closure on the stack
+                // Save the previous closure on the stack (to be restored)
                 int64_t empty_slots_idx = length + num_args;
+                stk.replace(closure_register, empty_slots_idx);
+
+                // Place the current closure in the closure register
                 tagged_closure = tagged_closure | CLOSURE_TAG;
-                stk.replace(tagged_closure, empty_slots_idx);
+                closure_register = tagged_closure;
 
                 // Place the PC on the stack
                 stk.replace(create_fixnum_ptr(pc), empty_slots_idx + 1);
@@ -871,14 +882,26 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::TAILCALL:
             {
                 DEBUG_MSG("TAILCALL");
-                throw std::runtime_error("tailcall unimplemented.");
+                throw std::runtime_error("tailcalls unimplemented.");
                 break;
             }
             case opcode_t::RETURN:
             {
                 DEBUG_MSG("RETURN");
-                // Pop top 2 off stack
+                // Pop ret value off the stack
                 uint64_t ret_val = stk.pop();
+
+                // Is the stack empty? If so we are in a tail call and should finish
+                if (stk.empty()) {
+                    return std::make_unique<uint64_t>(ret_val);
+                }
+
+                // Restore the closure register
+                // Do not check type...in theory this could be 0
+                uint64_t closure_ptr = stk.pop();
+                closure_register = closure_ptr;
+
+                // Get the return address
                 uint64_t ret_addr = stk.pop_and_check_type(VT::FIXNUM);
 
                 // Put the return value back on the stack

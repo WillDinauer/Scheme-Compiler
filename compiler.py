@@ -73,6 +73,7 @@ class I(enum.IntEnum):
 
     # CLOSURE
     ALLOC_CLO = enum.auto()
+    GET_CLOSURE = enum.auto()
 
     # Function calls
     FUNCALL = enum.auto()
@@ -81,6 +82,23 @@ class I(enum.IntEnum):
 
     # Unspecified
     PUSH_UNSPEC = enum.auto()
+
+# Environment item types
+class EIT(enum.IntEnum):
+    DEFAULT=enum.auto()
+    FREE_VAR=enum.auto()
+    CLOSURE=enum.auto()
+
+class EnvItem:
+    def __init__(self, position, type=EIT.DEFAULT):
+        self.position = position
+        self.type = type
+    
+    def shift(self, shift_amt):
+        self.position += shift_amt
+
+    def copy(self):
+        return EnvItem(self.position, self.type)
 
 # Container for shift/tagging information
 class SI:
@@ -173,7 +191,7 @@ class Compiler:
         # iterate through bindings
         for i, binding in enumerate(binding_list):
             variable_name = binding[0]
-            new_environment[variable_name] = num_bindings - i - 1   # Sub 1 to 0-index
+            new_environment[variable_name] = EnvItem(num_bindings - i - 1)  # Subtract 1 to 0-index
 
             # Bindings take 1 argument (their value/expr)
             self.compile(binding[1], environment)
@@ -181,7 +199,8 @@ class Compiler:
         for key, value in environment.items():
             if key not in new_environment:
                 # Update environment for previously allocated locals as well
-                new_environment[key] = value + num_bindings
+                new_environment[key] = value.copy()
+                new_environment[key].shift(num_bindings)
         
         return new_environment
     
@@ -201,9 +220,10 @@ class Compiler:
         self.compile_rec_lambda(expr, lambda_name, environment)
 
         # Add binding and shift existing environment by 1 for new binding
-        new_environment[lambda_name] = 0
+        new_environment[lambda_name] = EnvItem(0)
         for key, value in environment.items():
-            new_environment[key] = value + num_bindings
+            new_environment[key] = value.copy()
+            new_environment[key].shift(num_bindings)
 
         return new_environment
     
@@ -232,9 +252,10 @@ class Compiler:
             self.code.append(I.SQUASH)
 
     def update_indices(self, environment, shift) -> dict:
-        new_environment = environment.copy()
-        for local in new_environment:
-            new_environment[local] += shift
+        new_environment = {}
+        for key, value in environment.items():
+            new_environment[key] = value.copy()
+            new_environment[key].shift(shift)
         return new_environment
     
     def compile_list(self, elements, opcode, environment):
@@ -264,20 +285,20 @@ class Compiler:
         i = 0
         for x in range(len(free_vars)-1, -1, -1):# Free vars
             variable = free_vars[x]
-            lambda_environment[variable] = i
+            lambda_environment[variable] = EnvItem(i)
             i += 1
         for x in range(len(args)-1, -1, -1): # Lambda arguments
             variable = args[x]
-            lambda_environment[variable] = i
+            lambda_environment[variable] = EnvItem(i)
             i += 1
         if lambda_name != None:
-            lambda_environment[lambda_name] = i
+            lambda_environment[lambda_name] = EnvItem(0, EIT.CLOSURE)
 
         # Assume lambdas only take 1 expr. Hence, in_tail_pos=True
         self.compile(body, lambda_environment, in_tail_pos=True)
 
-        # Squash free variables, args, and closure
-        for i in range(len(args) + len(free_vars) + 1):
+        # Squash free variables and args
+        for i in range(len(args) + len(free_vars)):
             self.code.append(I.SQUASH)
 
         # Return
@@ -500,9 +521,16 @@ class Compiler:
             case str():
                 # Local variables
                 if expr in environment:
-                    # Duplicate their value onto the top of the stack
-                    emit(I.GET)
-                    emit(box_fixnum(environment[expr]))
+                    # Duplicate their value onto the top of the stack\
+                    env_item = environment[expr]
+                    match env_item.type:
+                        case EIT.DEFAULT:
+                            emit(I.GET)
+                            emit(box_fixnum(env_item.position))
+                        case EIT.CLOSURE:
+                            emit(I.GET_CLOSURE)
+                        case EIT.FREE_VAR:
+                            compiler_error("Free Vars references in environment currently unimplemented.")
                 else:
                     compiler_error(f"Use of undefined variable '{expr}'")
     

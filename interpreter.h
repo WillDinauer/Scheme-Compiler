@@ -115,14 +115,15 @@ enum opcode_t : uint8_t {
 
     // CLOSURE
     ALLOC_CLO = 0x21,
+    GET_CLOSURE = 0x22,
 
     // Function calls
-    FUNCALL = 0x22,
-    TAILCALL = 0x23,
-    RETURN = 0x24,
+    FUNCALL = 0x23,
+    TAILCALL = 0x24,
+    RETURN = 0x25,
 
     // Unknown
-    PUSH_UNSPEC = 0x25,
+    PUSH_UNSPEC = 0x26,
 };
 
 // Type resolution and checking
