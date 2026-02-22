@@ -79,6 +79,9 @@ class I(enum.IntEnum):
     TAILCALL = enum.auto()
     RETURN = enum.auto()
 
+    # Unspecified
+    PUSH_UNSPEC = enum.auto()
+
 # Container for shift/tagging information
 class SI:
     def __init__(self, mask, tag, shift):
@@ -258,9 +261,7 @@ class Compiler:
 
         # Create theoretical environment to compile lambda within
         lambda_environment = {}
-        if lambda_name != None:
-            lambda_environment[lambda_name] = 1
-        i = 2   # Space for return and closure obj on stack
+        i = 0
         for x in range(len(free_vars)-1, -1, -1):# Free vars
             variable = free_vars[x]
             lambda_environment[variable] = i
@@ -269,22 +270,17 @@ class Compiler:
             variable = args[x]
             lambda_environment[variable] = i
             i += 1
+        if lambda_name != None:
+            lambda_environment[lambda_name] = i
 
         # Assume lambdas only take 1 expr. Hence, in_tail_pos=True
         self.compile(body, lambda_environment, in_tail_pos=True)
 
-        # At this point, top of stack is:
-        #   1.) Value to return
-        #   2.) Return Address (or...pc index)
-        #   3.) Closure ref
-        #   4...N.) Free variables and Args
-        # 
-        # Return will:
-        # -> pop + save top 3 of stack
-        # -> Get N from Closure ref.
-        # -> drop N values (pop)
-        # -> push ret value 
-        # -> jump to Ret Address (pc index)
+        # Squash free variables, args, and closure
+        for i in range(len(args) + len(free_vars) + 1):
+            self.code.append(I.SQUASH)
+
+        # Return
         self.code.append(I.RETURN)
 
         # Update placeholder jump
@@ -330,16 +326,9 @@ class Compiler:
         self.code.append(box_fixnum(function_start * OP_LEN))
 
         # Compile free_vars (with potential placeholders)
-        usage_indices = []
         for i in range(len(free_vars) - 1, -1, -1):
             el = free_vars[i]
-            # Emit placeholder load for var_name
-            if el == lambda_name:
-                usage_indices.append(i)
-                self.code.append(I.LOAD64)
-                self.code.append(box_fixnum(0))
-            else:
-                self.compile(el, self.update_indices(environment, len(free_vars) - 1 - i))
+            self.compile(el, self.update_indices(environment, len(free_vars) - 1 - i))
         self.code.append(I.ALLOC_VEC)
         self.code.append(box_fixnum(len(free_vars)))
 
@@ -519,6 +508,11 @@ class Compiler:
     
     def compile_function(self, expr, environment, in_tail_pos):
         args = expr[1:]
+        # Add space for ret and closure
+        self.code.append(I.PUSH_UNSPEC)
+        self.code.append(I.PUSH_UNSPEC)
+        environment = self.update_indices(environment, 2)
+
         # Compile args
         for i, arg in enumerate(args):
             self.compile(arg, self.update_indices(environment, i))
@@ -531,10 +525,10 @@ class Compiler:
         self.code.append(box_fixnum(len(args)))
 
         # Make the call
-        if in_tail_pos:
-            self.code.append(I.TAILCALL)
-        else:
-            self.code.append(I.FUNCALL)
+        # if in_tail_pos:
+            # self.code.append(I.TAILCALL)
+        # else:
+        self.code.append(I.FUNCALL)
 
     def write_to_stream(self, f):
         # human-readable

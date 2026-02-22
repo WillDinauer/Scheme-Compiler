@@ -854,12 +854,13 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                     stk.push(*vector);
                 }
 
-                // Push the closure again
+                // Place the closure on the stack
+                int64_t empty_slots_idx = length + num_args;
                 tagged_closure = tagged_closure | CLOSURE_TAG;
-                stk.push(tagged_closure);
+                stk.replace(tagged_closure, empty_slots_idx);
 
-                // Push the PC as the return addr
-                stk.push(create_fixnum_ptr(pc));
+                // Place the PC on the stack
+                stk.replace(create_fixnum_ptr(pc), empty_slots_idx + 1);
 
                 // Jump the PC to the function start
                 closure += WORD_LEN;
@@ -876,34 +877,22 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::RETURN:
             {
                 DEBUG_MSG("RETURN");
-                // Pop top 3 off stack
+                // Pop top 2 off stack
                 uint64_t ret_val = stk.pop();
                 uint64_t ret_addr = stk.pop_and_check_type(VT::FIXNUM);
-                uint64_t closure_ptr = stk.pop_and_check_type(VT::CLOSURE);
 
-                // Resolve closure
-                strip_tag(closure_ptr);
-                uint64_t* closure = (uint64_t*) closure_ptr;
-
-                // Get # of args and # of free vars
-                int64_t n_args = resolve_fixnum(*closure);
-                closure += WORD_LEN;
-                uint64_t vec_ptr = *closure;
-                strip_tag(vec_ptr);
-                uint64_t* vec = (uint64_t*) vec_ptr;
-                int64_t n_free = resolve_fixnum(*vec);
-
-                // Drop args and free vars
-                for (int64_t i = 0; i < n_args + n_free; i++) {
-                    stk.pop();
-                }
-                
                 // Put the return value back on the stack
                 stk.push(ret_val);
 
                 // Jump the pc
                 int64_t pc_index = resolve_fixnum(ret_addr);
                 pc = pc_index;
+                break;
+            }
+            case opcode_t::PUSH_UNSPEC:
+            {
+                DEBUG_MSG("PUSH_UNSPEC");
+                stk.push(UNSPEC_VAL);
                 break;
             }
             case opcode_t::FINISH:

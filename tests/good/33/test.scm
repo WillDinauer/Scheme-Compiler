@@ -6,4 +6,4 @@
                             acc
                             (fact-iter (- n 1) (* acc n))))))
               (fact-iter n 1)))))
-  (fact 1))
+  (fact 6))

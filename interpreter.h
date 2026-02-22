@@ -120,6 +120,9 @@ enum opcode_t : uint8_t {
     FUNCALL = 0x22,
     TAILCALL = 0x23,
     RETURN = 0x24,
+
+    // Unknown
+    PUSH_UNSPEC = 0x25,
 };
 
 // Type resolution and checking
@@ -177,6 +180,14 @@ public:
         uint64_t value = s.back();
         s.pop_back();
         return value;
+    }
+
+    void replace(uint64_t value, int64_t pos) {
+        size_t idx = s.size() - pos - 1;
+        if (idx >= s.size() || idx < 0) {
+            throw std::runtime_error("invalid index into stack for call to 'replace'");
+        }
+        s[idx] = value;
     }
 
     uint64_t pop_and_check_type(VT type) {
