@@ -36,6 +36,13 @@ class List:
         for e in self.elements:
             result += e.to_string()
         return result
+    
+class EmptyList:
+    def __init__(self):
+        pass
+
+    def to_string(self):
+        return "EmptyList"
 
 class Parser:
     def __init__(self, source: str):
@@ -68,6 +75,8 @@ class Parser:
             case ')':
                 self.pos += 1
                 return None
+            case '\'':
+                return self.parse_quoted()
             case '\"':
                 return self.parse_string()
             case c if c.isascii():
@@ -155,6 +164,30 @@ class Parser:
             case 'f':
                 self.pos += 1
                 return False
+            case _:
+                raise SyntaxError("Invalid or unimplemented special character")
+            
+    def parse_quoted(self):
+        self.try_increment(SyntaxError("Trying to parse quoted..."))
+
+        match self.peek():
+            case '':
+                raise EOFError("Unexpected end of input")
+            case '(':
+                return self.parse_list()
+            case _:
+                RuntimeError("Quoting currently unimplemented.")
+            
+    
+    def parse_list(self):
+        self.try_increment(SyntaxError("Failure while trying to parse list"))
+
+        if self.peek() == ')':
+            self.pos += 1
+            return EmptyList()
+
+        raise RuntimeError("Non-empty quoted lists are currently unimplemented.")
+
     
     def parse_char(self):
         self.pos += 1

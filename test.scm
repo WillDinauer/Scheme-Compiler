@@ -1,1 +1,1 @@
-(let ((a (list 1 2 3))) a)
+(let ((a (cons 2 '()))) a)

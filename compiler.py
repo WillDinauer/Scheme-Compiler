@@ -1,6 +1,6 @@
 import enum
 import sys
-from parser import scheme_parse, Character, String
+from parser import scheme_parse, Character, String, EmptyList
 
 LOG_TAG = "[COMPILER]"
 
@@ -394,12 +394,13 @@ class Compiler:
             case String():
                 char_arr = expr.get_characters()
                 self.compile_string(char_arr, environment)
+            case EmptyList():
+                emit(I.LOAD64)
+                emit(box_empty_list())
             case list():
                 # Empty list
                 if len(expr) == 0:
-                    emit(I.LOAD64)
-                    emit(box_empty_list())
-                    return
+                    compiler_error("invalid syntax: ()")
 
                 # List as a function call (only lambda can do this atm)
                 if isinstance(expr[0], list):
@@ -499,6 +500,7 @@ class Compiler:
                         emit(I.LOAD64)
                         emit(box_empty_list())
 
+                        # Cons everything together
                         for _ in range(len(args)):
                             emit(I.CONS)
                     
@@ -590,7 +592,7 @@ class Compiler:
 
 def lift_lambdas(expr, bound: set, free: set):
     match expr:
-        case int() | Character() | String():
+        case int() | Character() | String() | EmptyList():
             return
         case str() if expr in bound or expr in BUILTINS:
             return
