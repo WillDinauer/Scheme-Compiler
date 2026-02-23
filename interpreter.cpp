@@ -571,6 +571,15 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 v2 == v1 ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
                 break;
             }
+            case opcode_t::KLEG:
+            {
+                DEBUG_MSG("KLEG");
+                uint64_t v1 = stk.pop();
+                uint64_t v2 = stk.pop();
+
+                v2 == v1 ? stk.push(TRUE_BOOL) : stk.push(FALSE_BOOL);
+                break;
+            }
             case opcode_t::GET:
             {
                 DEBUG_MSG("GET");

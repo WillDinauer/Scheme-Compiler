@@ -86,44 +86,45 @@ enum opcode_t : uint8_t {
     MUL = 0x0E,
     LT = 0x0F,
     EQL = 0x10,
+    KLEG = 0x11,
 
     // For local variables
-    GET = 0x11,
-    DROP = 0x12,
-    SQUASH = 0x13,
+    GET = 0x12,
+    DROP = 0x13,
+    SQUASH = 0x14,
 
     // Conditionals
-    JMP = 0x14,
-    JIF = 0x15,
+    JMP = 0x15,
+    JIF = 0x16,
 
     // Cons
-    CONS = 0x16,
-    CAR = 0x17,
-    CDR = 0x18,
+    CONS = 0x17,
+    CAR = 0x18,
+    CDR = 0x19,
 
     // String
-    ALLOC_STR = 0x19,
-    STR_REF = 0x1A,
-    STR_SET = 0x1B,
-    STR_APPEND = 0x1C,
+    ALLOC_STR = 0x1A,
+    STR_REF = 0x1B,
+    STR_SET = 0x1C,
+    STR_APPEND = 0x1D,
 
     // Vector
-    ALLOC_VEC = 0x1D,
-    VEC_REF = 0x1E,
-    VEC_SET = 0x1F,
-    VEC_APPEND = 0x20,
+    ALLOC_VEC = 0x1E,
+    VEC_REF = 0x1F,
+    VEC_SET = 0x20,
+    VEC_APPEND = 0x21,
 
     // CLOSURE
-    ALLOC_CLO = 0x21,
-    GET_CLOSURE = 0x22,
+    ALLOC_CLO = 0x22,
+    GET_CLOSURE = 0x23,
 
     // Function calls
-    FUNCALL = 0x23,
-    TAILCALL = 0x24,
-    RETURN = 0x25,
+    FUNCALL = 0x24,
+    TAILCALL = 0x25,
+    RETURN = 0x26,
 
     // Unknown
-    PUSH_UNSPEC = 0x26,
+    PUSH_UNSPEC = 0x27,
 };
 
 // Type resolution and checking

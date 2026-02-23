@@ -44,6 +44,7 @@ class I(enum.IntEnum):
     MUL = enum.auto()
     LT = enum.auto()
     EQL = enum.auto()
+    KLEG = enum.auto()
 
     # Local variables
     GET = enum.auto()
@@ -454,6 +455,9 @@ class Compiler:
                         self.general_fn_emit(expr, 2, I.LT, environment)
                     case "=":
                         self.general_fn_emit(expr, 2, I.EQL, environment)
+
+                    case "eq?":
+                        self.general_fn_emit(expr, 2, I.KLEG, environment)
 
                     # Ternary functions
                     case "if":
