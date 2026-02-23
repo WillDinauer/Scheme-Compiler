@@ -162,6 +162,17 @@ std::string resolve_string(uint64_t value) {
     return res;
 }
 
+std::string cons_to_string(uint64_t value) {
+    type_check_or_fail(value, VT::PAIR);
+    strip_tag(value);
+    uint64_t* cons_ptr = (uint64_t *) value;
+
+    uint64_t first = *cons_ptr;
+    cons_ptr += WORD_LEN;
+    uint64_t second = *cons_ptr;
+    return "(" + value_to_string(first) + " " + value_to_string(second) + ")";
+}
+
 std::string vector_to_string(uint64_t value) {
     // Get ptr to vector
     type_check_or_fail(value, VT::VECTOR);
@@ -223,6 +234,9 @@ std::string value_to_string(uint64_t value, bool include_type) {
         case VT::BOOL:
             v_string = cpp_bool_to_scheme_bool(resolve_bool((value)));
             break;
+        case VT::PAIR:
+            v_string = cons_to_string(value);
+            break;
         case VT::STRING:
             v_string = resolve_string(value);
             break;
@@ -231,6 +245,9 @@ std::string value_to_string(uint64_t value, bool include_type) {
             break;
         case VT::CLOSURE:
             v_string = closure_to_string(value);
+            break;
+        case VT::EMPTY_LIST:
+            v_string = "(EL)";
             break;
         case VT::UNSPECIFIED:
             v_string = "unspecified";

@@ -489,6 +489,18 @@ class Compiler:
                         # Compile all subexpressions
                         sub_expressions = expr[1:]
                         self.compile_subexprs(sub_expressions, environment)
+
+                    case "list":
+                        # Compile all args to the stack
+                        args = expr[1:]
+                        for i, sub_expr in enumerate(args):
+                            self.compile(sub_expr, self.update_indices(environment, i))
+                        # Add the empty list to serve as the end of the list
+                        emit(I.LOAD64)
+                        emit(box_empty_list())
+
+                        for _ in range(len(args)):
+                            emit(I.CONS)
                     
                     # String functions
                     case "string":

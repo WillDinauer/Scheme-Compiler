@@ -23,6 +23,19 @@ class String:
         for c in self.char_array:
             result += c.to_string()
         return result
+    
+class List:
+    def __init__(self, elements):
+        self.elements = elements
+    
+    def get_elements(self):
+        return self.elements
+    
+    def to_string(self):
+        result = ""
+        for e in self.elements:
+            result += e.to_string()
+        return result
 
 class Parser:
     def __init__(self, source: str):
@@ -51,7 +64,7 @@ class Parser:
             case '#':
                 return self.parse_special()
             case '(':
-                return self.parse_list()
+                return self.parse_subexpr()
             case ')':
                 self.pos += 1
                 return None
@@ -129,7 +142,7 @@ class Parser:
         return int(self.source[start:self.pos])
     
     def parse_special(self):
-        self.pos += 1
+        self.try_increment(SyntaxError("Trying to parse special..."))
 
         match self.peek():
             case '':
@@ -201,7 +214,7 @@ class Parser:
             self.pos += 1
         return self.source[start:self.pos]
     
-    def parse_list(self):
+    def parse_subexpr(self):
         expr_list = []
         self.pos += 1
         # This works because recursive calls will consume their respective closing parens
