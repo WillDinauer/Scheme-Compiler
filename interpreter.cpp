@@ -335,11 +335,63 @@ uint64_t *get_closure_ptr(uint64_t idx_ptr, uint64_t closure_ptr) {
     return clo_slot;
 }
 
+void validate_num_args(uint64_t* closure, int64_t num_args) {
+    // Validate # of arguments
+    int64_t check_ct = resolve_fixnum(*closure);
+    if (num_args != check_ct) {
+        throw std::runtime_error(std::format("Invalid number of arguments passed to lambda expr...({} for {} expected)", num_args, check_ct));
+    }
+}
+
+// Get length of free variable vector, given a closure
+int64_t get_fv_length(uint64_t *closure) {
+    closure += WORD_LEN;
+    uint64_t vec_ptr = *closure;
+    type_check_or_fail(vec_ptr, VT::VECTOR);
+    strip_tag(vec_ptr);
+    uint64_t* vector = (uint64_t *) vec_ptr;
+
+    return resolve_fixnum(*vector);
+}
+
+// Push the free variables, and return the length of the FV vector
+void push_free_variables(uint64_t *closure) {
+    // Resolve vector
+    closure += WORD_LEN;
+    uint64_t vec_ptr = *closure;
+    type_check_or_fail(vec_ptr, VT::VECTOR);
+    strip_tag(vec_ptr);
+    uint64_t* vector = (uint64_t *) vec_ptr;
+
+    // Push free variable values to the stack
+    int64_t length = resolve_fixnum(*vector);
+    for (int64_t i = 0; i < length; i++) {
+        vector += WORD_LEN;
+        stk.push(*vector);
+    }
+}
+
+// Remove previous locals (for tailcall optimization)
+void teardown(uint64_t *closure) {
+    // Copy all arguments to right above the return
+    int64_t num_args = resolve_fixnum(*closure);
+    for (int64_t i = 0; i < num_args; i++) {
+        int64_t src = stk.size() - num_args + i;
+        int64_t dst = rbp + i;
+        stk.overwrite_from_base(src, dst);
+    }
+
+    // Pop unneeded args
+    while (stk.size() > rbp + num_args) {
+        stk.pop();
+    }
+}
+
 // Run the code
 std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
     size_t pc = 0;
-    v_stack stk;
-    uint64_t closure_register = 0;
+    rdi = 0;
+    rbp = 0;
 
     while (pc < code.size()) {
         DEBUG_MSG(std::format("\npc: {}", pc));
@@ -826,8 +878,8 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::GET_CLOSURE:
             {
                 DEBUG_MSG("GET_CLOSURE");
-                type_check_or_fail(closure_register, VT::CLOSURE);
-                stk.push(closure_register);
+                type_check_or_fail(rdi, VT::CLOSURE);
+                stk.push(rdi);
                 break;
             }
             case opcode_t::FUNCALL:
@@ -842,39 +894,28 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 strip_tag(tagged_closure);
                 uint64_t* closure = (uint64_t*) tagged_closure;
 
-                // Validate # of arguments
-                int64_t check_ct = resolve_fixnum(*closure);
-                if (num_args != check_ct) {
-                    throw std::runtime_error(std::format("Invalid number of arguments passed to lambda expr...({} for {} expected)", num_args, check_ct));
-                }
+                // Validate arguments
+                validate_num_args(closure, num_args);
+                push_free_variables(closure);
+                int64_t length = get_fv_length(closure);
 
-                // Resolve vector
-                closure += WORD_LEN;
-                uint64_t vec_ptr = *closure;
-                type_check_or_fail(vec_ptr, VT::VECTOR);
-                strip_tag(vec_ptr);
-                uint64_t* vector = (uint64_t *) vec_ptr;
-
-                // Push free variable values to the stack
-                int64_t length = resolve_fixnum(*vector);
-                for (int64_t i = 0; i < length; i++) {
-                    vector += WORD_LEN;
-                    stk.push(*vector);
-                }
-
-                // Save the previous closure on the stack (to be restored)
+                // Save registers into the stack
                 int64_t empty_slots_idx = length + num_args;
-                stk.replace(closure_register, empty_slots_idx);
+                stk.replace(rdi, empty_slots_idx + 1);
+                stk.replace(rbp, empty_slots_idx + 2);
 
-                // Place the current closure in the closure register
+                // Place the current closure in rdi
                 tagged_closure = tagged_closure | CLOSURE_TAG;
-                closure_register = tagged_closure;
+                rdi = tagged_closure;
 
-                // Place the PC on the stack
-                stk.replace(create_fixnum_ptr(pc), empty_slots_idx + 1);
+                // Update stack base
+                rbp = stk.size() - empty_slots_idx - 1;
+
+                // Place the PC into the stack
+                stk.replace(create_fixnum_ptr(pc), empty_slots_idx);
 
                 // Jump the PC to the function start
-                closure += WORD_LEN;
+                closure += (2 * WORD_LEN);
                 int64_t pc_index = resolve_fixnum(*closure);
                 pc = pc_index;
                 break;
@@ -882,7 +923,31 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::TAILCALL:
             {
                 DEBUG_MSG("TAILCALL");
-                throw std::runtime_error("tailcalls unimplemented.");
+                // Get the arg count immediate
+                uint64_t tagged_arg_ct = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t num_args = resolve_fixnum(tagged_arg_ct);
+
+                // Get the closure
+                uint64_t tagged_closure = stk.pop_and_check_type(VT::CLOSURE);
+                strip_tag(tagged_closure);
+                uint64_t* closure = (uint64_t*) tagged_closure;
+
+                validate_num_args(closure, num_args);
+
+                // Teardown previous locals
+                teardown(closure);
+
+                // Overwrite the closure register
+                tagged_closure = tagged_closure | CLOSURE_TAG;
+                rdi = tagged_closure;
+                
+                // Push free variables to the stack
+                push_free_variables(closure);
+
+                // Jump the PC to the function start
+                closure += (2 * WORD_LEN);
+                int64_t pc_index = resolve_fixnum(*closure);
+                pc = pc_index;
                 break;
             }
             case opcode_t::RETURN:
@@ -891,18 +956,17 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 // Pop ret value off the stack
                 uint64_t ret_val = stk.pop();
 
-                // Is the stack empty? If so we are in a tail call and should finish
-                if (stk.empty()) {
+                // Is this the base of the stack? If so we are in a tail call and should finish
+                if (rbp == 0) {
                     return std::make_unique<uint64_t>(ret_val);
                 }
 
-                // Restore the closure register
-                // Do not check type...in theory this could be 0
-                uint64_t closure_ptr = stk.pop();
-                closure_register = closure_ptr;
-
                 // Get the return address
                 uint64_t ret_addr = stk.pop_and_check_type(VT::FIXNUM);
+
+                // Restore registers
+                rdi = stk.pop();
+                rbp = stk.pop();
 
                 // Put the return value back on the stack
                 stk.push(ret_val);

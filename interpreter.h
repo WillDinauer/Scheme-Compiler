@@ -183,6 +183,13 @@ public:
         return value;
     }
 
+    void overwrite_from_base(int64_t src, int64_t dst) {
+        if ((size_t) src >= s.size() || src < 0 || (size_t) dst >= s.size() || dst < 0) {
+            throw std::runtime_error(std::format("invalid index into stack for call to 'overwrite' - src: {} | dst: {} | size: {}", src, dst, s.size()));
+        }
+        s[dst] = s[src];
+    }
+
     void replace(uint64_t value, int64_t pos) {
         size_t idx = s.size() - pos - 1;
         if (idx >= s.size() || idx < 0) {
@@ -212,6 +219,10 @@ public:
         std::cout << "}" << std::endl;
     }
 };
+
+v_stack stk;
+uint64_t rdi;
+uint64_t rbp;
 
 
 #endif // INTERPRETER_H

@@ -537,9 +537,12 @@ class Compiler:
     def compile_function(self, expr, environment, in_tail_pos):
         args = expr[1:]
         # Add space for ret and closure
-        self.code.append(I.PUSH_UNSPEC)
-        self.code.append(I.PUSH_UNSPEC)
-        environment = self.update_indices(environment, 2)
+        if not in_tail_pos:
+            # Make space for return, rdi, and rbp
+            num_replacements = 3
+            for i in range(num_replacements):
+                self.code.append(I.PUSH_UNSPEC)
+            environment = self.update_indices(environment, num_replacements)
 
         # Compile args
         for i, arg in enumerate(args):
@@ -553,10 +556,10 @@ class Compiler:
         self.code.append(box_fixnum(len(args)))
 
         # Make the call
-        # if in_tail_pos:
-            # self.code.append(I.TAILCALL)
-        # else:
-        self.code.append(I.FUNCALL)
+        if in_tail_pos:
+            self.code.append(I.TAILCALL)
+        else:
+            self.code.append(I.FUNCALL)
 
     def write_to_stream(self, f):
         # human-readable
