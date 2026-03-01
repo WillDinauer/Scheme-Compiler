@@ -1,1 +1,1 @@
-(cdr (car (cons (cons #\a 5) ())))
+(cdr (car (cons (cons #\a 5) '())))

@@ -1,1 +1,1 @@
-(let ((a (cons 2 '()))) a)
+(let ((a (lambda (x) (+ 1 2) x))) (a 5))

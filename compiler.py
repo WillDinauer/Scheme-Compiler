@@ -296,7 +296,7 @@ class Compiler:
             lambda_environment[lambda_name] = EnvItem(0, EIT.CLOSURE)
 
         # Assume lambdas only take 1 expr. Hence, in_tail_pos=True
-        self.compile(body, lambda_environment, in_tail_pos=True)
+        self.compile_subexprs(body, lambda_environment)
 
         # Squash free variables and args
         for i in range(len(args) + len(free_vars)):
@@ -315,7 +315,7 @@ class Compiler:
     def compile_lambda(self, expr, environment):
         args = expr[1]
         free_vars = expr[2]
-        body = expr[3]
+        body = expr[3:]
 
         # Compile the lambda body
         function_start = self.compile_lambda_body(args, body, free_vars)
@@ -335,7 +335,7 @@ class Compiler:
     def compile_rec_lambda(self, expr, lambda_name, environment):
         args = expr[1]
         free_vars = expr[2]
-        body = expr[3]
+        body = expr[3:]
 
         if lambda_name in free_vars:
             free_vars.remove(lambda_name)
@@ -611,7 +611,6 @@ def lift_lambdas(expr, bound: set, free: set):
             # Function call
             match expr[0]:
                 case "lambda":
-                    validate_args(expr, 2)
                     local_bound = set()
                     local_free = set()
                     
