@@ -264,7 +264,7 @@ def is_empty(source):
     return sp.is_empty()
 
 scheme_library = {
-    "plus": "(lambda (x y) (+ x y))"
+    "map": "(lambda (x y) (if (null? y) y (cons (x (car y)) (map x (cdr y)))))"
 }
 
 def construct_header():
