@@ -273,7 +273,7 @@ scheme_simple_library = {
 scheme_rec_library = {
     "map": "(lambda (x y) (if (null? y) y (cons (x (car y)) (map x (cdr y)))))",
     "foldl": "(lambda (f acc l) (if (null? l) acc (foldl f (f (car l) acc) (cdr l))))",
-    "foldr": "(lambda (f acc l) (if (null? l) acc (foldr f (f acc (car l)) (cdr l))))"
+    "foldr": "(lambda (f acc l) (if (null? l) acc (f (car l) (foldr f acc (cdr l)))))"
 }
 
 def add_bindings(library: dict):
