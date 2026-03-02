@@ -935,7 +935,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 rdi = tagged_closure;
 
                 // Update stack base
-                rbp = stk.size() - empty_slots_idx - 1;
+                rbp = stk.size() - empty_slots_idx;
 
                 // Place the PC into the stack
                 stk.replace(create_fixnum_ptr(pc), empty_slots_idx);

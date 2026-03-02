@@ -1,1 +1,3 @@
-(let ((a (lambda (x) (+ 1 2) x))) (a 5))
+(let ((a 1) (b 3))
+    (let ((a (if #t b a)))
+        (if #t a b)))

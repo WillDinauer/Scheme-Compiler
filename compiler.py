@@ -162,7 +162,7 @@ def validate_let(expr):
     binding_list = expr[1]
     if not isinstance(binding_list, list):
             compiler_error(f"Bad let: Binding list is not a list - {binding_list}")
-    bound = set()
+    bound = []
         
     # iterate through bindings
     for binding in binding_list:
@@ -176,7 +176,7 @@ def validate_let(expr):
             compiler_error(f"Bad let: Trying to bind non-str variable '{variable_name}'")
         if variable_name in bound:
             compiler_error(f"Bad let: local variable '{variable_name}' being bound twice in single let expr.")
-        bound.add(variable_name)
+        bound.append(variable_name)
     
     return bound
 
@@ -594,6 +594,35 @@ class Compiler:
     def finish(self):
         self.code.append(I.FINISH)
 
+def convert_let(expr):
+    match expr:
+        case list():
+            if len(expr) == 0:
+                return expr
+            if expr[0] == "let":
+                # Build the lambda itself
+                bindings = validate_let(expr)
+                lambda_expr = ["lambda", bindings]
+                body = expr[2:]
+                for sub_expr in body:
+                    lambda_expr.append(convert_let(sub_expr))
+                
+                # Bindings are arguments to lambda
+                new_expr = [lambda_expr]
+                binding_list = expr[1]
+                for binding in binding_list:
+                    new_expr.append(convert_let(binding[1]))
+                    
+                return new_expr
+            else:
+                new_exprs = []
+                for sub_expr in expr:
+                    new_exprs.append(convert_let(sub_expr))
+                return new_exprs
+                    
+        case _:
+            return expr
+
 def lift_lambdas(expr, bound: set, free: set):
     match expr:
         case int() | Character() | String() | EmptyList():
@@ -621,7 +650,8 @@ def lift_lambdas(expr, bound: set, free: set):
                         local_bound.add(variable)
 
                     # Recurse
-                    lift_lambdas(expr[2], local_bound, local_free)
+                    for sub_expr in expr[2:]:
+                        lift_lambdas(sub_expr, local_bound, local_free)
                     
                     # Add all truly free variables to the structure
                     free_vars = []
@@ -666,6 +696,11 @@ def lift_lambdas(expr, bound: set, free: set):
                         lift_lambdas(sub_expr, bound, free)
         case _:
             raise NotImplementedError(expr)
+        
+def apply_passes(function):
+    function = convert_let(function)
+    lift_lambdas(function, set(), set())
+    return function
                     
 
 def compile_program():
@@ -676,8 +711,8 @@ def compile_program():
     # Compile all functions at the root of the file
     compiler = Compiler()
     for i, function in enumerate(program):
-        lift_lambdas(function, set(), set())
-        compiler.compile(function, {})
+        function = apply_passes(function)
+        compiler.compile(function, {}, True)
 
         # Drop value (except for the last function)
         if i < len(program) - 1:
