@@ -699,10 +699,10 @@ def lift_lambdas(expr, bound: set, free: set):
         case _:
             raise NotImplementedError(expr)
         
-def apply_passes(function):
+def apply_passes(program):
     # function = let_conversion_pass(function)
-    lift_lambdas(function, set(), set())
-    return function
+    lift_lambdas(program, set(), set())
+    return program
                     
 
 def compile_program():
@@ -710,17 +710,11 @@ def compile_program():
     source = sys.stdin.read()
     program = scheme_parse(source)
 
-    # Compile all functions at the root of the file
+    # Compile the program (and finish)
     compiler = Compiler()
-    for i, function in enumerate(program):
-        function = apply_passes(function)
-        compiler.compile(function, {}, in_tail_pos=True)
-
-        # Drop value (except for the last function)
-        if i < len(program) - 1:
-            compiler.drop_return_value()
-
-    # Last value should be returned for display
+    if program is not None:
+        program = apply_passes(program)
+        compiler.compile(program, {}, in_tail_pos=True)
     compiler.finish()
 
     # Write the code out

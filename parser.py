@@ -58,6 +58,10 @@ class Parser:
         self.pos += 1
         if self.finished():
             raise err
+        
+    def is_empty(self):
+        self.skip_whitespace()
+        return self.finished()
 
     def parse(self) -> object:
         self.skip_whitespace()
@@ -254,17 +258,38 @@ class Parser:
         while (expr := self.parse()) != None: # ')' returns None
             expr_list.append(expr)
         return expr_list
+    
+def is_empty(source):
+    sp = Parser(source)
+    return sp.is_empty()
 
+scheme_library = {
+    "plus": "(lambda (x y) (+ x y))"
+}
+
+def construct_header():
+    header = "(letrec ("
+    # Add library bindings
+    for i, (key, value) in enumerate(scheme_library.items()):
+        binding = "(" + key + " " + value + ")"
+
+        # Spaces between bindings
+        if i != len(scheme_library) - 1:
+            bindings += " "
+
+        header += binding
+    header += ") "
+    return header
 
 def scheme_parse(source: str) -> object:
-    expressions = []
-
+    # Special case empty file
+    if is_empty(source):
+        return
+    
+    source = construct_header() + source + ")"
     sp = Parser(source)
-    while sp.pos < sp.length:
-        expr = sp.parse()
-        if expr:
-            expressions.append(expr)
-    return expressions
+    expr = sp.parse()
+    return expr
 
 class ParseTests(unittest.TestCase):
     def _parse(self, source: str) -> object:
