@@ -206,22 +206,24 @@ class Compiler:
         return new_environment
     
     def create_letrec_environment(self, environment, binding_list) -> dict:
-        # Note...this check is for letrec taking a temporary single arg
         num_bindings = len(binding_list)
-        if num_bindings != 1:
-            compiler_error(f"letrec must have a single binding at the moment (received {num_bindings})")
         new_environment = {}
 
-        # Add the binding to the environment
-        binding = binding_list[0]
-        lambda_name = binding[0]
-        expr = binding[1]
+        # Iterate through bindings
+        for i, binding in enumerate(binding_list):
+            lambda_name = binding[0]
+            expr = binding[1]
 
-        # Compile the binding - this is assumed to be a lambda
-        self.compile_rec_lambda(expr, lambda_name, environment)
+            # Validate lambda
+            if not isinstance(expr, list) or len(expr) == 0 or expr[0] != "lambda":
+                compiler_error(f"letrec currently only takes lambda bindings (got {lambda_name} -> {expr})")
 
-        # Add binding and shift existing environment by 1 for new binding
-        new_environment[lambda_name] = EnvItem(0)
+            # Compile the binding - this is assumed to be a lambda
+            self.compile_rec_lambda(expr, lambda_name, environment)
+
+            # Add binding and shift existing environment by 1 for new binding
+            new_environment[lambda_name] = EnvItem(num_bindings - i - 1)
+
         for key, value in environment.items():
             new_environment[key] = value.copy()
             new_environment[key].shift(num_bindings)
@@ -605,19 +607,19 @@ def let_conversion_pass(expr):
                 lambda_expr = ["lambda", bindings]
                 body = expr[2:]
                 for sub_expr in body:
-                    lambda_expr.append(convert_let(sub_expr))
+                    lambda_expr.append(let_conversion_pass(sub_expr))
                 
                 # Bindings are arguments to lambda
                 new_expr = [lambda_expr]
                 binding_list = expr[1]
                 for binding in binding_list:
-                    new_expr.append(convert_let(binding[1]))
+                    new_expr.append(let_conversion_pass(binding[1]))
                     
                 return new_expr
             else:
                 new_exprs = []
                 for sub_expr in expr:
-                    new_exprs.append(convert_let(sub_expr))
+                    new_exprs.append(let_conversion_pass(sub_expr))
                 return new_exprs
                     
         case _:
