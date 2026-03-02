@@ -263,30 +263,47 @@ def is_empty(source):
     sp = Parser(source)
     return sp.is_empty()
 
-scheme_library = {
-    "map": "(lambda (x y) (if (null? y) y (cons (x (car y)) (map x (cdr y)))))"
+scheme_simple_library = {
+    "+": "(lambda (x y) (+ x y))",
+    "-": "(lambda (x y) (- x y))",
+    "*": "(lambda (x y) (* x y))",
+    "cons": "(lambda (x y) (cons x y))",
 }
 
-def construct_header():
-    header = "(letrec ("
-    # Add library bindings
-    for i, (key, value) in enumerate(scheme_library.items()):
+scheme_rec_library = {
+    "map": "(lambda (x y) (if (null? y) y (cons (x (car y)) (map x (cdr y)))))",
+    "foldl": "(lambda (f acc l) (if (null? l) acc (foldl f (f (car l) acc) (cdr l))))",
+    "foldr": "(lambda (f acc l) (if (null? l) acc (foldr f (f acc (car l)) (cdr l))))"
+}
+
+def add_bindings(library: dict):
+    res = ""
+    for i, (key, value) in enumerate(library.items()):
         binding = "(" + key + " " + value + ")"
 
         # Spaces between bindings
-        if i != len(scheme_library) - 1:
-            bindings += " "
+        if i != len(scheme_rec_library) - 1:
+            binding += " "
+        res += binding
+    return res
 
-        header += binding
-    header += ") "
+def construct_simple_header():
+    header = "(let (" + add_bindings(scheme_simple_library) + ") "
     return header
+
+def construct_rec_header():
+    header = "(letrec (" + add_bindings(scheme_rec_library) + ") "
+    return header
+
+def construct_header():
+    return construct_rec_header()
 
 def scheme_parse(source: str) -> object:
     # Special case empty file
     if is_empty(source):
         return
     
-    source = construct_header() + source + ")"
+    source = construct_header() + source + "))"
     sp = Parser(source)
     expr = sp.parse()
     return expr
