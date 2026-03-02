@@ -220,9 +220,10 @@ std::string cpp_bool_to_scheme_bool(bool value) {
 // Convert value to [VALUE - resolved_value] pair
 std::string value_to_string(uint64_t value, bool include_type) {
     VT type = resolve_type(value);
-    std::string res = "[" + type_to_string(type) + ": ";
+    std::string res = "[" + type_to_string(type);
 
     std::string v_string;
+    bool default_case = false;
     switch (type) {
         case VT::FIXNUM:
             v_string = std::to_string(resolve_fixnum(value));
@@ -234,30 +235,21 @@ std::string value_to_string(uint64_t value, bool include_type) {
         case VT::BOOL:
             v_string = cpp_bool_to_scheme_bool(resolve_bool((value)));
             break;
-        case VT::PAIR:
-            v_string = cons_to_string(value);
-            break;
         case VT::STRING:
             v_string = resolve_string(value);
             break;
-        case VT::VECTOR:
-            v_string = vector_to_string(value);
-            break;
-        case VT::CLOSURE:
-            v_string = closure_to_string(value);
-            break;
-        case VT::EMPTY_LIST:
-            v_string = "(EL)";
-            break;
-        case VT::UNSPECIFIED:
-            v_string = "unspecified";
-            break;
         default:
-            v_string = std::to_string(value);
+            default_case = true;
+            v_string = "";
     }
     // Value only
     if (!include_type) {
         return v_string;
+    }
+
+    // Extra chars for nice printing
+    if (!default_case) {
+        v_string = ": " + v_string;
     }
 
     res += v_string + "]";

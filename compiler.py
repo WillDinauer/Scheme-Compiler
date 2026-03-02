@@ -228,7 +228,7 @@ class Compiler:
 
         return new_environment
     
-    def compile_let(self, expr, environment, let_type):
+    def compile_let(self, expr, environment, let_type, in_tail_pos):
         validate_let(expr)
         bindings = expr[1]
 
@@ -246,7 +246,7 @@ class Compiler:
 
         # Compile sub expressions
         sub_expressions = expr[2:]
-        self.compile_subexprs(sub_expressions, environment)
+        self.compile_subexprs(sub_expressions, environment, in_tail_pos)
 
         # Tear down locals
         for _ in range(len(bindings)):
@@ -295,8 +295,8 @@ class Compiler:
         if lambda_name != None:
             lambda_environment[lambda_name] = EnvItem(0, EIT.CLOSURE)
 
-        # Assume lambdas only take 1 expr. Hence, in_tail_pos=True
-        self.compile_subexprs(body, lambda_environment)
+
+        self.compile_subexprs(body, lambda_environment, in_tail_pos=True)
 
         # Squash free variables and args
         for i in range(len(args) + len(free_vars)):
@@ -369,9 +369,9 @@ class Compiler:
         # Add specific opcode
         self.code.append(opcode)
     
-    def compile_subexprs(self, sub_expressions, environment):
+    def compile_subexprs(self, sub_expressions, environment, in_tail_pos):
         for i, sub_expr in enumerate(sub_expressions):
-            self.compile(sub_expr, environment, in_tail_pos= (i == len(sub_expressions)-1))
+            self.compile(sub_expr, environment, in_tail_pos and (i == len(sub_expressions)-1))
 
             # Drop unused values
             if i < len(sub_expressions) - 1:
@@ -470,13 +470,13 @@ class Compiler:
                         ckpt1 = len(self.code)
 
                         # -- Then -- 
-                        self.compile(expr[2], environment, in_tail_pos=True)
+                        self.compile(expr[2], environment, in_tail_pos)
                         emit(I.JMP)
                         emit(box_fixnum(0))
                         ckpt2 = len(self.code)
 
                         # -- Else --
-                        self.compile(expr[3], environment, in_tail_pos=True)
+                        self.compile(expr[3], environment, in_tail_pos)
                         ckpt3 = len(self.code)
                         
                         # Update placeholder values
@@ -485,15 +485,15 @@ class Compiler:
 
                     # n-ary functions
                     case "let":
-                        self.compile_let(expr, environment, LET_TYPE.DEFAULT)
+                        self.compile_let(expr, environment, LET_TYPE.DEFAULT, in_tail_pos)
 
                     case "letrec":
-                        self.compile_let(expr, environment, LET_TYPE.REC)
+                        self.compile_let(expr, environment, LET_TYPE.REC, in_tail_pos)
 
                     case "begin":
                         # Compile all subexpressions
                         sub_expressions = expr[1:]
-                        self.compile_subexprs(sub_expressions, environment)
+                        self.compile_subexprs(sub_expressions, environment, in_tail_pos)
 
                     case "list":
                         # Compile all args to the stack
@@ -594,7 +594,7 @@ class Compiler:
     def finish(self):
         self.code.append(I.FINISH)
 
-def convert_let(expr):
+def let_conversion_pass(expr):
     match expr:
         case list():
             if len(expr) == 0:
@@ -698,7 +698,7 @@ def lift_lambdas(expr, bound: set, free: set):
             raise NotImplementedError(expr)
         
 def apply_passes(function):
-    function = convert_let(function)
+    # function = let_conversion_pass(function)
     lift_lambdas(function, set(), set())
     return function
                     
@@ -712,7 +712,7 @@ def compile_program():
     compiler = Compiler()
     for i, function in enumerate(program):
         function = apply_passes(function)
-        compiler.compile(function, {}, True)
+        compiler.compile(function, {}, in_tail_pos=True)
 
         # Drop value (except for the last function)
         if i < len(program) - 1:

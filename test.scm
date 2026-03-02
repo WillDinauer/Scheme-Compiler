@@ -1,3 +1,9 @@
-(let ((a 1) (b 3))
-    (let ((a (if #t b a)))
-        (if #t a b)))
+(let ((fact
+          (lambda (n)
+            (letrec ((fact-iter
+                      (lambda (n acc)
+                        (if (= n 0)
+                            acc
+                            (fact-iter (- n 1) (* acc n))))))
+              (fact-iter n 1)))))
+  (fact 6))
