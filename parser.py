@@ -303,7 +303,7 @@ def scheme_parse(source: str) -> object:
     if is_empty(source):
         return
     
-    source = construct_header() + source + "))"
+    source = construct_header() + source + ")"
     sp = Parser(source)
     expr = sp.parse()
     return expr

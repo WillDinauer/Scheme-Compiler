@@ -9,7 +9,7 @@ BUILTINS = {
     "null?", "zero?", "not", "integer?", "boolean?", 
     "car", "cdr", "cons",
     "add1", "sub1", "+", "-", "*", "<", "=", 
-    "if", "let", "begin", 
+    "if", "let", "begin",
     "string", "string-ref", "string-set!", "string-append", 
     "vector", "vector-ref", "vector-set!", "vector-append", 
     "lambda"
@@ -195,7 +195,7 @@ class Compiler:
             new_environment[variable_name] = EnvItem(num_bindings - i - 1)  # Subtract 1 to 0-index
 
             # Bindings take 1 argument (their value/expr)
-            self.compile(binding[1], environment)
+            self.compile(binding[1], self.update_indices(environment, i))
         
         for key, value in environment.items():
             if key not in new_environment:
@@ -219,7 +219,7 @@ class Compiler:
                 compiler_error(f"letrec currently only takes lambda bindings (got {lambda_name} -> {expr})")
 
             # Compile the binding - this is assumed to be a lambda
-            self.compile_rec_lambda(expr, lambda_name, environment)
+            self.compile_rec_lambda(expr, lambda_name, self.update_indices(environment, i))
 
             # Add binding and shift existing environment by 1 for new binding
             new_environment[lambda_name] = EnvItem(num_bindings - i - 1)
@@ -413,6 +413,8 @@ class Compiler:
                 
                 # Function call
                 func_name = expr[0]
+
+                # Do not call lambdas for library functions
                 if func_name in environment:
                     self.compile_function(expr, environment, in_tail_pos)
                     return
@@ -624,6 +626,73 @@ def let_conversion_pass(expr):
                     
         case _:
             return expr
+        
+def cc_compare(a, b):
+    if type(a) != type(b):
+        return False
+    
+    match a:
+        case int():
+            return a == b
+        case Character() | String():
+            return a.to_string == b.to_string()
+        case EmptyList():
+            return True
+        case str():
+            return a == b
+        case list():
+            if len(a) != len(b):
+                return False
+            for i in range(len(a)):
+                if not cc_compare(a[i], b[i]):
+                    return False
+            return True
+        case _:
+            raise NotImplementedError(a)
+        
+def cc_find(quoted, quote_expr):
+    # Check all expr in quoted
+    for i, expr in enumerate(quoted):
+        # Compare item by item
+        if cc_compare(expr, quote_expr):
+            return i
+    return None
+        
+def cc_pass(expr, quoted):
+    if isinstance(expr, list):
+        if len(expr) == 0:
+            return expr
+        
+        if expr[0] == "quote":
+            if len(expr) != 2:
+                compiler_error("quote takes a single argument")
+            quote_expr = expr[1]
+            i = cc_find(quoted, quote_expr)
+            if i is None:
+                quoted.append(quote_expr)
+                return f"temp{len(quoted)-1}"
+            return f"temp{i}"
+        else:
+            new_exprs = []
+            for sub_expr in expr:
+                new_exprs.append(cc_pass(sub_expr, quoted))
+            return new_exprs
+            
+    return expr
+
+        
+def complex_constants_pass(expr):
+    quoted = []
+    expr = cc_pass(expr, quoted)
+
+    if len(quoted) == 0:
+        return expr
+
+    bindings = []
+    for i in range(len(quoted)):
+        bindings.append([f"temp{i}", quoted[i]])
+    return ["let", bindings, expr]
+
 
 def lift_lambdas(expr, bound: set, free: set):
     match expr:
@@ -700,7 +769,8 @@ def lift_lambdas(expr, bound: set, free: set):
             raise NotImplementedError(expr)
         
 def apply_passes(program):
-    # function = let_conversion_pass(function)
+    program = complex_constants_pass(program)
+    # program = let_conversion_pass(program)
     lift_lambdas(program, set(), set())
     return program
                     
