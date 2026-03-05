@@ -144,8 +144,8 @@ int64_t resolve_fixnum(int64_t value) {
     return value >> FIXNUM_SHIFT;
 }
 
-std::string resolve_string(uint64_t value) {
-    type_check_or_fail(value, VT::STRING);
+std::string resolve_string(uint64_t value, VT type) {
+    type_check_or_fail(value, type);
     strip_tag(value);
     uint64_t* ptr = (uint64_t *) value;
 
@@ -236,7 +236,10 @@ std::string value_to_string(uint64_t value, bool include_type) {
             v_string = cpp_bool_to_scheme_bool(resolve_bool((value)));
             break;
         case VT::STRING:
-            v_string = resolve_string(value);
+            v_string = resolve_string(value, VT::STRING);
+            break;
+        case VT::SYMBOL:
+            v_string = resolve_string(value, VT::SYMBOL);
             break;
         default:
             default_case = true;
@@ -998,6 +1001,16 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             {
                 DEBUG_MSG("PUSH_UNSPEC");
                 stk.push(UNSPEC_VAL);
+                break;
+            }
+            case opcode_t::TO_SYMBOL:
+            {
+                DEBUG_MSG("TO_SYMBOL");
+                // Pop a string and convert it to a symbol
+                uint64_t str_ptr = stk.pop_and_check_type(VT::STRING);
+                strip_tag(str_ptr);
+                str_ptr |= SYMBOL_TAG;
+                stk.push(str_ptr);
                 break;
             }
             case opcode_t::FINISH:

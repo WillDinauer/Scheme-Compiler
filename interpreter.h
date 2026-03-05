@@ -125,6 +125,9 @@ enum opcode_t : uint8_t {
 
     // Unknown
     PUSH_UNSPEC = 0x27,
+
+    // Symbols
+    TO_SYMBOL = 0x28,
 };
 
 // Type resolution and checking

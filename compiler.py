@@ -1,6 +1,6 @@
 import enum
 import sys
-from parser import scheme_parse, Character, String, EmptyList
+from parser import scheme_parse, Character, String, EmptyList, Symbol
 
 LOG_TAG = "[COMPILER]"
 
@@ -83,6 +83,9 @@ class I(enum.IntEnum):
 
     # Unspecified
     PUSH_UNSPEC = enum.auto()
+
+    # Symbols
+    TO_SYMBOL = enum.auto()
 
 # Environment item types
 class EIT(enum.IntEnum):
@@ -397,6 +400,10 @@ class Compiler:
             case String():
                 char_arr = expr.get_characters()
                 self.compile_string(char_arr, environment)
+            case Symbol():
+                char_arr = expr.get_characters()
+                self.compile_string(char_arr, environment)
+                emit(I.TO_SYMBOL)
             case EmptyList():
                 emit(I.LOAD64)
                 emit(box_empty_list())
@@ -413,6 +420,15 @@ class Compiler:
                 
                 # Function call
                 func_name = expr[0]
+                
+                # Is this quoted instead?
+                if isinstance(func_name, Symbol):
+                    char_arr = func_name.get_characters()
+                    self.compile_string(char_arr, environment)
+                    emit(I.TO_SYMBOL)
+                    for i, element in enumerate(expr[1:]):
+                        self.compile(element, self.update_indices(environment, i + 1))
+                    return
 
                 # Do not call lambdas for library functions
                 if func_name in environment:
@@ -634,7 +650,7 @@ def cc_compare(a, b):
     match a:
         case int():
             return a == b
-        case Character() | String():
+        case Character() | String() | Symbol():
             return a.to_string == b.to_string()
         case EmptyList():
             return True
@@ -657,8 +673,21 @@ def cc_find(quoted, quote_expr):
         if cc_compare(expr, quote_expr):
             return i
     return None
+
+# Convert strings to symbols
+def convert_quote_expr(expr):
+    match expr:
+        case str():
+            return Symbol(expr)
+        case list():
+            new_expr = []
+            for sub_expr in expr:
+                new_expr.append(convert_quote_expr(sub_expr))
+            return new_expr
+        case _:
+            return expr
         
-def cc_pass(expr, quoted):
+def cc_pass_recurse(expr, quoted):
     if isinstance(expr, list):
         if len(expr) == 0:
             return expr
@@ -666,7 +695,7 @@ def cc_pass(expr, quoted):
         if expr[0] == "quote":
             if len(expr) != 2:
                 compiler_error("quote takes a single argument")
-            quote_expr = expr[1]
+            quote_expr = convert_quote_expr(expr[1])
             i = cc_find(quoted, quote_expr)
             if i is None:
                 quoted.append(quote_expr)
@@ -675,7 +704,7 @@ def cc_pass(expr, quoted):
         else:
             new_exprs = []
             for sub_expr in expr:
-                new_exprs.append(cc_pass(sub_expr, quoted))
+                new_exprs.append(cc_pass_recurse(sub_expr, quoted))
             return new_exprs
             
     return expr
@@ -683,7 +712,7 @@ def cc_pass(expr, quoted):
         
 def complex_constants_pass(expr):
     quoted = []
-    expr = cc_pass(expr, quoted)
+    expr = cc_pass_recurse(expr, quoted)
 
     if len(quoted) == 0:
         return expr
@@ -696,7 +725,7 @@ def complex_constants_pass(expr):
 
 def lift_lambdas(expr, bound: set, free: set):
     match expr:
-        case int() | Character() | String() | EmptyList():
+        case int() | Character() | String() | Symbol() | EmptyList():
             return
         case str() if expr in bound or expr in BUILTINS:
             return

@@ -37,6 +37,20 @@ class List:
             result += e.to_string()
         return result
     
+class Symbol:
+    def __init__(self, symbol):
+        self.symbol = symbol
+        self.char_array = [Character(c) for c in symbol]
+
+    def get_characters(self):
+        return self.char_array
+    
+    def to_string(self):
+        result = ""
+        for e in self.elements:
+            result += e.to_string()
+        return result
+    
 class EmptyList:
     def __init__(self):
         pass
