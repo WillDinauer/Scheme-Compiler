@@ -9,10 +9,11 @@ BUILTINS = {
     "null?", "zero?", "not", "integer?", "boolean?", 
     "car", "cdr", "cons",
     "add1", "sub1", "+", "-", "*", "<", "=", 
-    "if", "let", "begin",
+    "if", "let", "let*", "letrec", "begin",
     "string", "string-ref", "string-set!", "string-append", 
     "vector", "vector-ref", "vector-set!", "vector-append", 
-    "lambda"
+    "lambda", "map", "foldl", "foldr", "quote"
+    "and", "or",
 }
 
 # We are assuming 64-bit
@@ -208,6 +209,20 @@ class Compiler:
         
         return new_environment
     
+    def create_letstar_environment(self, environment, binding_list) -> dict:
+        # iterate through bindings
+        for binding in binding_list:
+            variable_name = binding[0]
+
+            # Bindings take 1 argument (their value/expr)
+            self.compile(binding[1], environment)
+
+            # Shift by 1
+            environment = self.update_indices(environment, 1)
+            environment[variable_name] = EnvItem(0)  # Immediately put the binding in the env
+        
+        return environment
+    
     def create_letrec_environment(self, environment, binding_list) -> dict:
         num_bindings = len(binding_list)
         new_environment = {}
@@ -244,7 +259,7 @@ class Compiler:
             case LET_TYPE.REC:
                 environment = self.create_letrec_environment(environment, bindings)
             case LET_TYPE.STAR:
-                compiler_error("let* unimplemented.")
+                environment = self.create_letstar_environment(environment, bindings)
             case _:
                 compiler_error("unimplemented let type.")
         
@@ -507,6 +522,9 @@ class Compiler:
                     case "let":
                         self.compile_let(expr, environment, LET_TYPE.DEFAULT, in_tail_pos)
 
+                    case "let*":
+                        self.compile_let(expr, environment, LET_TYPE.STAR, in_tail_pos)
+
                     case "letrec":
                         self.compile_let(expr, environment, LET_TYPE.REC, in_tail_pos)
 
@@ -651,7 +669,7 @@ def cc_compare(a, b):
         case int():
             return a == b
         case Character() | String() | Symbol():
-            return a.to_string == b.to_string()
+            return a.to_string() == b.to_string()
         case EmptyList():
             return True
         case str():

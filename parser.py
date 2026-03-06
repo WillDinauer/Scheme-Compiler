@@ -47,7 +47,7 @@ class Symbol:
     
     def to_string(self):
         result = ""
-        for e in self.elements:
+        for e in self.char_array:
             result += e.to_string()
         return result
     

@@ -1,0 +1,1 @@
+(eq? (quote a) (quote a))
