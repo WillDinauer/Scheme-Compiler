@@ -12,7 +12,7 @@ BUILTINS = {
     "if", "let", "let*", "letrec", "begin",
     "string", "string-ref", "string-set!", "string-append", 
     "vector", "vector-ref", "vector-set!", "vector-append", 
-    "lambda", "map", "foldl", "foldr", "quote"
+    "lambda", "map", "foldl", "foldr", "quote", "set!",
     "and", "or",
 }
 
@@ -763,6 +763,40 @@ def complex_constants_pass(expr):
         bindings.append([f"temp{i}", quoted[i]])
     return ["let", bindings, expr]
 
+def handle_mp_list(expr):
+    new_exprs = []
+    defined = []
+    for sub_expr in expr:
+        new_exprs.append(macro_pass(sub_expr, defined))
+
+    if len(defined) > 0:
+        bindings = [[variable, EmptyList()] for variable in defined]
+        return [["let", bindings] + new_exprs]
+    return new_exprs
+
+def macro_pass(expr, defined=[]):
+    if isinstance(expr, list):
+        if len(expr) == 0:
+            return expr
+        
+        match expr[0]:
+            case "define":
+                variable = expr[1]
+                defined.append(variable)
+                return ["set!", variable, expr[2]]
+            case "lambda":
+                return ["lambda", expr[1]] + handle_mp_list(expr[2:])
+            case "let" | "let*" | "letrec":
+                bindings = expr[1]
+                new_bindings = []
+                for binding in bindings:
+                    new_bindings.append(handle_mp_list(binding))
+                return [expr[0], new_bindings] + handle_mp_list(expr[2:])
+            case "if":
+                return [expr[0], macro_pass(expr[1]), macro_pass(expr[2], []), macro_pass(expr[3], [])]
+            case _:
+                return handle_mp_list(expr)
+    return expr
 
 def lift_lambdas(expr, bound: set, free: set):
     match expr:
@@ -819,6 +853,18 @@ def lift_lambdas(expr, bound: set, free: set):
                     # Recurse over let statements
                     for sub_expr in expr[2:]:
                         lift_lambdas(sub_expr, sub_bound, free)
+                case "let*":
+                    let_bindings = validate_let(expr)
+                    sub_bound = bound.copy()
+
+                    # Lift lambdas in let bindings, adding bindings to the bound set
+                    for pair in expr[1]:
+                        lift_lambdas(pair[1], sub_bound, free)
+                        sub_bound.add(pair[0])
+
+                    # Recurse over let statements
+                    for sub_expr in expr[2:]:
+                        lift_lambdas(sub_expr, sub_bound, free)
                 case "letrec":
                     # Validate the letrec and add bindings to the bound set
                     let_bindings = validate_let(expr)
@@ -840,7 +886,7 @@ def lift_lambdas(expr, bound: set, free: set):
         
 def apply_passes(program):
     program = complex_constants_pass(program)
-    # program = let_conversion_pass(program)
+    program = macro_pass(program)
     lift_lambdas(program, set(), set())
     return program
                     

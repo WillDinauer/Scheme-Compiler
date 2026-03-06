@@ -312,12 +312,15 @@ def construct_rec_header():
 def construct_header():
     return construct_rec_header()
 
+def construct_footer():
+    return ")"
+
 def scheme_parse(source: str) -> object:
     # Special case empty file
     if is_empty(source):
         return
     
-    source = construct_header() + source + ")"
+    # source = construct_header() + source + construct_footer()
     sp = Parser(source)
     expr = sp.parse()
     return expr
