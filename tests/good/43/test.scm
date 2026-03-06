@@ -1,1 +1,2 @@
-(eq? (quote (list 1 2)) (quote (1 2)))
+(let* ((a (lambda (x) (+ x 5))) (b (a 10)) (c (lambda (x) (* b x))))
+    (c 5))

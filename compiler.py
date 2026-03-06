@@ -493,6 +493,12 @@ class Compiler:
 
                     case "eq?":
                         self.general_fn_emit(expr, 2, I.KLEG, environment)
+                    case "or":
+                        validate_args(expr, 2)
+                        self.compile(["if", expr[1], True, expr[2]], environment)
+                    case "and":
+                        validate_args(expr, 2)
+                        self.compile(["if", ["not", expr[1]], False, expr[2]], environment)
 
                     # Ternary functions
                     case "if":
@@ -521,10 +527,8 @@ class Compiler:
                     # n-ary functions
                     case "let":
                         self.compile_let(expr, environment, LET_TYPE.DEFAULT, in_tail_pos)
-
                     case "let*":
                         self.compile_let(expr, environment, LET_TYPE.STAR, in_tail_pos)
-
                     case "letrec":
                         self.compile_let(expr, environment, LET_TYPE.REC, in_tail_pos)
 
