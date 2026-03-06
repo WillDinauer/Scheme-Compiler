@@ -774,13 +774,15 @@ def handle_mp_list(expr):
         return [["let", bindings] + new_exprs]
     return new_exprs
 
-def macro_pass(expr, defined=[]):
+def macro_pass(expr, defined=[], invalid_ctx=False):
     if isinstance(expr, list):
         if len(expr) == 0:
             return expr
         
         match expr[0]:
             case "define":
+                if invalid_ctx:
+                    compiler_error(f"'define' in contex wehere definitions are not allowed. Expr: {expr}")
                 variable = expr[1]
                 defined.append(variable)
                 return ["set!", variable, expr[2]]
@@ -790,10 +792,10 @@ def macro_pass(expr, defined=[]):
                 bindings = expr[1]
                 new_bindings = []
                 for binding in bindings:
-                    new_bindings.append(handle_mp_list(binding))
+                    new_bindings.append([binding[0], macro_pass(binding[1], [], True)])
                 return [expr[0], new_bindings] + handle_mp_list(expr[2:])
             case "if":
-                return [expr[0], macro_pass(expr[1]), macro_pass(expr[2], []), macro_pass(expr[3], [])]
+                return [expr[0], macro_pass(expr[1], [], True), macro_pass(expr[2], [], True), macro_pass(expr[3], [], True)]
             case _:
                 return handle_mp_list(expr)
     return expr
