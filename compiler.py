@@ -88,6 +88,9 @@ class I(enum.IntEnum):
     # Symbols
     TO_SYMBOL = enum.auto()
 
+    # Set
+    SET = enum.auto()
+
 # Environment item types
 class EIT(enum.IntEnum):
     DEFAULT=enum.auto()
@@ -499,6 +502,22 @@ class Compiler:
                     case "and":
                         validate_args(expr, 2)
                         self.compile(["if", ["not", expr[1]], False, expr[2]], environment)
+                    case "set!":
+                        validate_args(expr, 2)
+                        variable = expr[1]
+                        value = expr[2]
+
+                        # Make sure var is in the environment
+                        if variable not in environment:
+                            compiler_error("set! not of form - (set! variable value)")
+                        position = environment[variable].position
+
+                        # Compile the new value to set
+                        self.compile(value, environment)
+
+                        # Make the call
+                        emit(I.SET)
+                        emit(box_fixnum(position))
 
                     # Ternary functions
                     case "if":

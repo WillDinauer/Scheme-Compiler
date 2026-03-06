@@ -128,6 +128,9 @@ enum opcode_t : uint8_t {
 
     // Symbols
     TO_SYMBOL = 0x28,
+
+    // Set
+    SET = 0x29,
 };
 
 // Type resolution and checking
@@ -194,7 +197,7 @@ public:
         s[dst] = s[src];
     }
 
-    void replace(uint64_t value, int64_t pos) {
+    void replace(int64_t pos, uint64_t value) {
         size_t idx = s.size() - pos - 1;
         if (idx >= s.size() || idx < 0) {
             throw std::runtime_error("invalid index into stack for call to 'replace'");

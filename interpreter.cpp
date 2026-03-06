@@ -922,8 +922,8 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
 
                 // Save registers into the stack
                 int64_t empty_slots_idx = length + num_args;
-                stk.replace(rdi, empty_slots_idx + 1);
-                stk.replace(rbp, empty_slots_idx + 2);
+                stk.replace(empty_slots_idx + 1, rdi);
+                stk.replace(empty_slots_idx + 2, rbp);
 
                 // Place the current closure in rdi
                 tagged_closure = tagged_closure | CLOSURE_TAG;
@@ -933,7 +933,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 rbp = stk.size() - empty_slots_idx;
 
                 // Place the PC into the stack
-                stk.replace(create_fixnum_ptr(pc), empty_slots_idx);
+                stk.replace(empty_slots_idx, create_fixnum_ptr(pc));
 
                 // Jump the PC to the function start
                 closure += (2 * WORD_LEN);
@@ -1011,6 +1011,20 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 strip_tag(str_ptr);
                 str_ptr |= SYMBOL_TAG;
                 stk.push(str_ptr);
+                break;
+            }
+            case opcode_t::SET:
+            {
+                DEBUG_MSG("SET");
+                // Get the index and value
+                uint64_t tagged_idx = typed_read_word(pc, code, VT::FIXNUM);
+                uint64_t value = stk.pop();
+                int64_t idx = resolve_fixnum(tagged_idx);
+                std::cout << "idx: " << idx << std::endl;
+
+                // Replace the value in the stack, and push unspec as result
+                stk.replace(idx, value);
+                stk.push(UNSPEC_VAL);
                 break;
             }
             case opcode_t::FINISH:
