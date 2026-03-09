@@ -156,6 +156,12 @@ def box_empty_list():
 def compiler_error(msg):
     raise SyntaxError(f"{LOG_TAG}: {msg}")
 
+def resolve_args_and_arity(args):
+    if len(args) >= 2 and args[len(args)-2] == ".":
+        args.pop(len(args)-2)
+        return args, -len(args)
+    return args, len(args)
+
 def validate_args(expr, num_args):
     if num_args != len(expr[1:]):
         error_msg = f"Invalid usage of function '{expr[0]}': {num_args} args expected."
@@ -383,7 +389,7 @@ class Compiler:
         return function_start
 
     def compile_lambda(self, expr, environment):
-        args = expr[1]
+        args, arity = resolve_args_and_arity(expr[1])
         free_vars = expr[2]
         body = expr[3:]
 
@@ -397,13 +403,13 @@ class Compiler:
         # Construct vector of free args and add n_args
         self.compile_vector(free_vars, self.update_indices(environment, 1))
         self.code.append(I.LOAD64)
-        self.code.append(box_fixnum(len(args)))
+        self.code.append(box_fixnum(arity))
 
         # Closure captures n_args, vector of free arguments, and function addr
         self.code.append(I.ALLOC_CLO)
 
     def compile_rec_lambda(self, expr, lambda_name, incoming, environment):
-        args = expr[1]
+        args, arity = resolve_args_and_arity(expr[1])
         free_vars = expr[2]
         body = expr[3:]
 
@@ -431,7 +437,7 @@ class Compiler:
 
         # Load n_args
         self.code.append(I.LOAD64)
-        self.code.append(box_fixnum(len(args)))
+        self.code.append(box_fixnum(arity))
 
         # Closure captures n_args, vector of free arguments, and function addr
         self.code.append(I.ALLOC_CLO)

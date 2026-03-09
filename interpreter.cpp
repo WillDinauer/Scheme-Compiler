@@ -347,9 +347,43 @@ uint64_t *get_closure_ptr(uint64_t idx_ptr, uint64_t closure_ptr) {
     return clo_slot;
 }
 
+// Function to do CONS to top of stack
+void do_cons(void) {
+    validate_allocation(2*WORD_LEN);
+
+    // Grab CAR and CDR
+    uint64_t cdr = stk.pop();
+    uint64_t car = stk.pop();
+                
+    // Address to put on stack
+    uint64_t addr = (uint64_t) heap_ptr | PAIR_TAG;
+
+    // Place onto heap, then push addr
+    heap_write_word(car);
+    heap_write_word(cdr);
+    stk.push(addr);
+}
+
 void validate_num_args(uint64_t* closure, int64_t num_args) {
     // Validate # of arguments
     int64_t check_ct = resolve_fixnum(*closure);
+
+    // Check if variable-arity procedure (negative check count)
+    if (check_ct < 0) {
+        check_ct = -check_ct;
+        if (num_args < check_ct) {
+            throw std::runtime_error(std::format("Invalid number of arguments passed to lambda expr...({} for minimum {})", num_args, check_ct));
+        }
+        if (num_args == check_ct) {
+            return;
+        }
+
+        // Need to construct list from args
+        stk.push(EL_TAG);
+        for (int64_t i = num_args; i < check_ct; i++) {
+            do_cons();
+        }
+    }
     if (num_args != check_ct) {
         throw std::runtime_error(std::format("Invalid number of arguments passed to lambda expr...({} for {} expected)", num_args, check_ct));
     }
@@ -630,19 +664,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::CONS:
             {
                 DEBUG_MSG("CONS");
-                validate_allocation(2*WORD_LEN);
-
-                // Grab CAR and CDR
-                uint64_t cdr = stk.pop();
-                uint64_t car = stk.pop();
-                
-                // Address to put on stack
-                uint64_t addr = (uint64_t) heap_ptr | PAIR_TAG;
-
-                // Place onto heap, then push addr
-                heap_write_word(car);
-                heap_write_word(cdr);
-                stk.push(addr);
+                do_cons();
                 break;
             }
             case opcode_t::CAR:
