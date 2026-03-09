@@ -117,20 +117,21 @@ enum opcode_t : uint8_t {
     // CLOSURE
     ALLOC_CLO = 0x22,
     GET_CLOSURE = 0x23,
+    UNWRAP = 0x24,
 
     // Function calls
-    FUNCALL = 0x24,
-    TAILCALL = 0x25,
-    RETURN = 0x26,
+    FUNCALL = 0x25,
+    TAILCALL = 0x26,
+    RETURN = 0x27,
 
     // Unknown
-    PUSH_UNSPEC = 0x27,
+    PUSH_UNSPEC = 0x28,
 
     // Symbols
-    TO_SYMBOL = 0x28,
+    TO_SYMBOL = 0x29,
 
     // Set
-    SET = 0x29,
+    SET = 0x2A,
 };
 
 // Type resolution and checking

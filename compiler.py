@@ -76,6 +76,7 @@ class I(enum.IntEnum):
     # CLOSURE
     ALLOC_CLO = enum.auto()
     GET_CLOSURE = enum.auto()
+    UNWRAP = enum.auto()
 
     # Function calls
     FUNCALL = enum.auto()
@@ -226,28 +227,69 @@ class Compiler:
         
         return environment
     
+    def patch_closures(self, binding_list, incoming, environment):
+        for binding in binding_list:
+            lambda_name = binding[0]
+            expr = binding[1]
+
+            # Check for closures to patch
+            free_vars = expr[2]
+            if lambda_name in free_vars:
+                free_vars.remove(lambda_name)
+
+            patched = False
+            for i, free_var in enumerate(free_vars):
+                if free_var not in incoming:
+                    continue
+
+                # Get the free var vector onto the stack (if it's not there yet)
+                if not patched:
+                    patched = True
+                    self.code.append(I.GET)
+                    self.code.append(box_fixnum(environment[lambda_name].position))
+                    self.code.append(I.UNWRAP)
+
+                # Push index and closure ptr
+                self.code.append(I.LOAD64)
+                self.code.append(box_fixnum(i))
+                self.code.append(I.GET)
+                self.code.append(box_fixnum((len(incoming) + 1) - incoming.index(free_var)))
+                # ^ (len(incoming) + 1) to account for CLOSURE and FIXNUM just pushed
+
+                # Patch the vector and drop the unspecified result
+                self.code.append(I.VEC_SET)
+                self.code.append(I.DROP)
+
     def create_letrec_environment(self, environment, binding_list) -> dict:
         num_bindings = len(binding_list)
-        new_environment = {}
+        new_environment = self.update_indices(environment, 0)
+        incoming = []
 
-        # Iterate through bindings
+        # Validate and capture new binding names
+        for i, binding in enumerate(binding_list):
+            lambda_name = binding[0]
+            expr = binding[1]
+            # Error checking
+            if not isinstance(expr, list) or len(expr) == 0 or expr[0] != "lambda":
+                compiler_error(f"letrec currently only takes lambda bindings (got {lambda_name} -> {expr})")
+            if lambda_name in incoming:
+                compiler_error(f"duplicate binding '{lambda_name}' for call to letrec")
+
+            incoming.append(lambda_name)
+
+        # Compile the new bindings
         for i, binding in enumerate(binding_list):
             lambda_name = binding[0]
             expr = binding[1]
 
-            # Validate lambda
-            if not isinstance(expr, list) or len(expr) == 0 or expr[0] != "lambda":
-                compiler_error(f"letrec currently only takes lambda bindings (got {lambda_name} -> {expr})")
-
             # Compile the binding - this is assumed to be a lambda
-            self.compile_rec_lambda(expr, lambda_name, self.update_indices(environment, i))
+            self.compile_rec_lambda(expr, lambda_name, incoming, self.update_indices(environment, i))
 
             # Add binding and shift existing environment by 1 for new binding
             new_environment[lambda_name] = EnvItem(num_bindings - i - 1)
 
-        for key, value in environment.items():
-            new_environment[key] = value.copy()
-            new_environment[key].shift(num_bindings)
+        # Patch up free variable vectors
+        self.patch_closures(binding_list, incoming, new_environment)
 
         return new_environment
     
@@ -259,10 +301,10 @@ class Compiler:
         match let_type:
             case LET_TYPE.DEFAULT:
                 environment = self.create_let_environment(environment, bindings)
-            case LET_TYPE.REC:
-                environment = self.create_letrec_environment(environment, bindings)
             case LET_TYPE.STAR:
                 environment = self.create_letstar_environment(environment, bindings)
+            case LET_TYPE.REC:
+                environment = self.create_letrec_environment(environment, bindings)
             case _:
                 compiler_error("unimplemented let type.")
         
@@ -355,7 +397,7 @@ class Compiler:
         # Closure captures n_args, vector of free arguments, and function addr
         self.code.append(I.ALLOC_CLO)
 
-    def compile_rec_lambda(self, expr, lambda_name, environment):
+    def compile_rec_lambda(self, expr, lambda_name, incoming, environment):
         args = expr[1]
         free_vars = expr[2]
         body = expr[3:]
@@ -373,7 +415,12 @@ class Compiler:
         # Compile free_vars (with potential placeholders)
         for i in range(len(free_vars) - 1, -1, -1):
             el = free_vars[i]
-            self.compile(el, self.update_indices(environment, len(free_vars) - 1 - i))
+            if el in incoming:
+                self.code.append(I.PUSH_UNSPEC)
+            elif el in environment:
+                self.compile(el, self.update_indices(environment, len(free_vars) - 1 - i))
+            else:
+                compiler_error(f"uncaptured free variable while compiling lambda: {el}")
         self.code.append(I.ALLOC_VEC)
         self.code.append(box_fixnum(len(free_vars)))
 

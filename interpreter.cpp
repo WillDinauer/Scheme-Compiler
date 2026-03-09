@@ -903,6 +903,21 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 stk.push(rdi);
                 break;
             }
+            case opcode_t::UNWRAP:
+            {
+                DEBUG_MSG("UNWRAP");
+                // Verify closure
+                uint64_t closure_ptr = stk.pop_and_check_type(VT::CLOSURE);
+                strip_tag(closure_ptr);
+                uint64_t* closure = (uint64_t *) closure_ptr;
+                closure += WORD_LEN;
+
+                // Get vector and push it
+                uint64_t vector_ptr = *closure;
+                type_check_or_fail(vector_ptr, VT::VECTOR);
+                stk.push(vector_ptr);
+                break;
+            }
             case opcode_t::FUNCALL:
             {
                 DEBUG_MSG("FUNCALL");

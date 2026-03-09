@@ -1,1 +1,1 @@
-(eq? (quote (list 1 2)) (quote (1 2)))
+(eq? (quote (list 1 2)) (quote (list 1 2)))
