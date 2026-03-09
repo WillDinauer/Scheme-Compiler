@@ -141,6 +141,9 @@ def tag_ptr(value, type):
     return value
 
 def box_fixnum(val):
+    # Conversion for negatives
+    if val < 0:
+        return tag_ptr(val & (1 << (SYSTEM_TYPE - SHIFT_INFO["fixnum"].shift)) - 1, "fixnum")
     return tag_ptr(val, "fixnum")
 
 def box_char(c):
@@ -159,7 +162,7 @@ def compiler_error(msg):
 def resolve_args_and_arity(args):
     if len(args) >= 2 and args[len(args)-2] == ".":
         args.pop(len(args)-2)
-        return args, -len(args)
+        return args, -(len(args) - 1)
     return args, len(args)
 
 def validate_args(expr, num_args):

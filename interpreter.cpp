@@ -364,7 +364,7 @@ void do_cons(void) {
     stk.push(addr);
 }
 
-void validate_num_args(uint64_t* closure, int64_t num_args) {
+int validate_num_args(uint64_t* closure, int64_t num_args) {
     // Validate # of arguments
     int64_t check_ct = resolve_fixnum(*closure);
 
@@ -374,19 +374,17 @@ void validate_num_args(uint64_t* closure, int64_t num_args) {
         if (num_args < check_ct) {
             throw std::runtime_error(std::format("Invalid number of arguments passed to lambda expr...({} for minimum {})", num_args, check_ct));
         }
-        if (num_args == check_ct) {
-            return;
-        }
-
         // Need to construct list from args
         stk.push(EL_TAG);
-        for (int64_t i = num_args; i < check_ct; i++) {
+        for (int64_t i = check_ct; i < num_args; i++) {
             do_cons();
         }
-    }
-    if (num_args != check_ct) {
+        return check_ct + 1;
+    } 
+    else if (num_args != check_ct) {
         throw std::runtime_error(std::format("Invalid number of arguments passed to lambda expr...({} for {} expected)", num_args, check_ct));
     }
+    return num_args;
 }
 
 // Get length of free variable vector, given a closure
@@ -953,7 +951,7 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 uint64_t* closure = (uint64_t*) tagged_closure;
 
                 // Validate arguments
-                validate_num_args(closure, num_args);
+                num_args = validate_num_args(closure, num_args);
                 push_free_variables(closure);
                 int64_t length = get_fv_length(closure);
 

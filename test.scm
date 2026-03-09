@@ -1,1 +1,1 @@
-(let ((f (lambda (a b . c) (vector a b c)))) (f 1 2 3 4))
+(let ((f (lambda (a b . c) (vector a b c))))  (car (cdr (vector-ref (f 10 20 30 40) 2))))

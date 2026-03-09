@@ -1,0 +1,1 @@
+(let ((f (lambda (a b . c) (vector a b c))))  (car (vector-ref (f 10 20 30 40) 2)))
