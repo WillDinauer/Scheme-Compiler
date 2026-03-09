@@ -320,7 +320,7 @@ def scheme_parse(source: str) -> object:
     if is_empty(source):
         return
     
-    # source = construct_header() + source + construct_footer()
+    source = construct_header() + source + construct_footer()
     sp = Parser(source)
     expr = sp.parse()
     return expr

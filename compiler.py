@@ -262,7 +262,7 @@ class Compiler:
 
     def create_letrec_environment(self, environment, binding_list) -> dict:
         num_bindings = len(binding_list)
-        new_environment = self.update_indices(environment, 0)
+        new_environment = {}
         incoming = []
 
         # Validate and capture new binding names
@@ -287,6 +287,11 @@ class Compiler:
 
             # Add binding and shift existing environment by 1 for new binding
             new_environment[lambda_name] = EnvItem(num_bindings - i - 1)
+
+        # Update environment
+        for key, value in environment.items():
+            new_environment[key] = value.copy()
+            new_environment[key].shift(num_bindings)
 
         # Patch up free variable vectors
         self.patch_closures(binding_list, incoming, new_environment)
