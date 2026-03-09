@@ -841,12 +841,14 @@ def macro_pass(expr, defined=[], invalid_ctx=False):
             case "lambda":
                 return ["lambda", expr[1]] + handle_mp_list(expr[2:])
             case "let" | "let*" | "letrec":
+                validate_let(expr)
                 bindings = expr[1]
                 new_bindings = []
                 for binding in bindings:
                     new_bindings.append([binding[0], macro_pass(binding[1], [], True)])
                 return [expr[0], new_bindings] + handle_mp_list(expr[2:])
             case "if":
+                validate_args(expr, 3)
                 return [expr[0], macro_pass(expr[1], [], True), macro_pass(expr[2], [], True), macro_pass(expr[3], [], True)]
             case _:
                 return handle_mp_list(expr)

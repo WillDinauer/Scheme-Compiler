@@ -1035,7 +1035,6 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 uint64_t tagged_idx = typed_read_word(pc, code, VT::FIXNUM);
                 uint64_t value = stk.pop();
                 int64_t idx = resolve_fixnum(tagged_idx);
-                std::cout << "idx: " << idx << std::endl;
 
                 // Replace the value in the stack, and push unspec as result
                 stk.replace(idx, value);
