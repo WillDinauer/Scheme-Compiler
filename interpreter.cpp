@@ -370,7 +370,7 @@ int validate_num_args(uint64_t* closure, int64_t num_args) {
 
     // Check if variable-arity procedure (negative check count)
     if (check_ct < 0) {
-        check_ct = -check_ct;
+        check_ct = -check_ct - 1;
         if (num_args < check_ct) {
             throw std::runtime_error(std::format("Invalid number of arguments passed to lambda expr...({} for minimum {})", num_args, check_ct));
         }

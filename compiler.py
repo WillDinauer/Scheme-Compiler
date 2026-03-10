@@ -166,7 +166,7 @@ def compiler_error(msg):
 def resolve_args_and_arity(args):
     if len(args) >= 2 and args[len(args)-2] == ".":
         args.pop(len(args)-2)
-        return args, -(len(args) - 1)
+        return args, -len(args)
     return args, len(args)
 
 def validate_args(expr, num_args):
@@ -700,6 +700,7 @@ class Compiler:
 
         # Load lambda or function call
         self.compile(expr[0], environment)
+        environment = self.update_indices(environment, 1)
 
         args = expr[1:]
         # Compile args
