@@ -1,0 +1,1 @@
+(let* ((a (lambda (x y) (+ x y))) (b (lambda () (foldl a 0 (list 1 2 3))))) (b))

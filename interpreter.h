@@ -123,15 +123,19 @@ enum opcode_t : uint8_t {
     FUNCALL = 0x25,
     TAILCALL = 0x26,
     RETURN = 0x27,
+    RESCUE = 0x28,
 
     // Unknown
-    PUSH_UNSPEC = 0x28,
+    PUSH_UNSPEC = 0x29,
 
     // Symbols
-    TO_SYMBOL = 0x29,
+    TO_SYMBOL = 0x2A,
 
     // Set
-    SET = 0x2A,
+    SET = 0x2B,
+
+    // Apply
+    APPLY = 0x2C,
 };
 
 // Type resolution and checking
@@ -204,6 +208,16 @@ public:
             throw std::runtime_error("invalid index into stack for call to 'replace'");
         }
         s[idx] = value;
+    }
+
+    uint64_t snatch(int64_t pos_from_top) {
+        size_t idx = s.size() - 1 - pos_from_top;
+        if (idx < 0 || idx >= s.size()) {
+            throw std::runtime_error("invalid index into stack for call to 'snatch'");
+        }
+        uint64_t value = s[idx];
+        s.erase(s.begin() + idx);
+        return value;
     }
 
     uint64_t pop_and_check_type(VT type) {

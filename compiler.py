@@ -12,7 +12,7 @@ BUILTINS = {
     "if", "let", "let*", "letrec", "begin",
     "string", "string-ref", "string-set!", "string-append", 
     "vector", "vector-ref", "vector-set!", "vector-append", 
-    "lambda", "map", "foldl", "foldr", "quote", "set!",
+    "lambda", "quote", "set!", "list",
     "and", "or",
 }
 
@@ -82,6 +82,7 @@ class I(enum.IntEnum):
     FUNCALL = enum.auto()
     TAILCALL = enum.auto()
     RETURN = enum.auto()
+    RESCUE = enum.auto()
 
     # Unspecified
     PUSH_UNSPEC = enum.auto()
@@ -91,6 +92,9 @@ class I(enum.IntEnum):
 
     # Set
     SET = enum.auto()
+
+    # Apply
+    APPLY = enum.auto()
 
 # Environment item types
 class EIT(enum.IntEnum):
@@ -162,7 +166,7 @@ def compiler_error(msg):
 def resolve_args_and_arity(args):
     if len(args) >= 2 and args[len(args)-2] == ".":
         args.pop(len(args)-2)
-        return args, -(len(args) - 1)
+        return args, -len(args)
     return args, len(args)
 
 def validate_args(expr, num_args):
@@ -223,11 +227,17 @@ class Compiler:
         return new_environment
     
     def create_letstar_environment(self, environment, binding_list) -> dict:
+        for item in environment:
+            print(item)
         # iterate through bindings
         for binding in binding_list:
             variable_name = binding[0]
 
             # Bindings take 1 argument (their value/expr)
+            print(f"compiling {binding[1]} in letstar")
+            print("env:")
+            for item in environment:
+                print(item)
             self.compile(binding[1], environment)
 
             # Shift by 1
@@ -654,6 +664,11 @@ class Compiler:
                     case "lambda":
                         self.compile_lambda(expr, environment)
 
+                    # Apply
+                    case "apply":
+                        validate_args(expr, 2)
+                        self.compile_function(expr[1:], environment, in_tail_pos, applied=True)
+
                     case _:
                         compiler_error(f"Calling unbound/undefined '{func_name}' as a function.")
                         
@@ -661,7 +676,7 @@ class Compiler:
             case str():
                 # Local variables
                 if expr in environment:
-                    # Duplicate their value onto the top of the stack\
+                    # Duplicate their value onto the top of the stack
                     env_item = environment[expr]
                     match env_item.type:
                         case EIT.DEFAULT:
@@ -674,8 +689,7 @@ class Compiler:
                 else:
                     compiler_error(f"Use of undefined variable '{expr}'")
     
-    def compile_function(self, expr, environment, in_tail_pos):
-        args = expr[1:]
+    def compile_function(self, expr, environment, in_tail_pos, applied=False):
         # Add space for ret and closure
         if not in_tail_pos:
             # Make space for return, rdi, and rbp
@@ -684,16 +698,25 @@ class Compiler:
                 self.code.append(I.PUSH_UNSPEC)
             environment = self.update_indices(environment, num_replacements)
 
+        # Load lambda or function call
+        self.compile(expr[0], environment)
+        environment = self.update_indices(environment, 1)
+
+        args = expr[1:]
         # Compile args
         for i, arg in enumerate(args):
             self.compile(arg, self.update_indices(environment, i))
+        
+        # Unwrap args list if needed
+        if applied:
+            self.code.append(I.APPLY)
+        else:
+            # Load the # of args onto the stack
+            self.code.append(I.LOAD64)
+            self.code.append(box_fixnum(len(args)))
 
-        # Load lambda or function call
-        self.compile(expr[0], self.update_indices(environment, len(args)))
-
-        # Load the # of args onto the stack
-        self.code.append(I.LOAD64)
-        self.code.append(box_fixnum(len(args)))
+        # Shift the closure from below args to above
+        self.code.append(I.RESCUE)
 
         # Make the call
         if in_tail_pos:
