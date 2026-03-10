@@ -941,14 +941,14 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::FUNCALL:
             {
                 DEBUG_MSG("FUNCALL");
-                // Get the arg count immediate
-                uint64_t tagged_arg_ct = stk.pop_and_check_type(VT::FIXNUM);
-                int64_t num_args = resolve_fixnum(tagged_arg_ct);
-
                 // Get the closure
                 uint64_t tagged_closure = stk.pop_and_check_type(VT::CLOSURE);
                 strip_tag(tagged_closure);
                 uint64_t* closure = (uint64_t*) tagged_closure;
+
+                // Get the arg count immediate
+                uint64_t tagged_arg_ct = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t num_args = resolve_fixnum(tagged_arg_ct);
 
                 // Validate arguments
                 num_args = validate_num_args(closure, num_args);
@@ -979,14 +979,14 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
             case opcode_t::TAILCALL:
             {
                 DEBUG_MSG("TAILCALL");
-                // Get the arg count immediate
-                uint64_t tagged_arg_ct = stk.pop_and_check_type(VT::FIXNUM);
-                int64_t num_args = resolve_fixnum(tagged_arg_ct);
-
                 // Get the closure
                 uint64_t tagged_closure = stk.pop_and_check_type(VT::CLOSURE);
                 strip_tag(tagged_closure);
                 uint64_t* closure = (uint64_t*) tagged_closure;
+
+                // Get the arg count immediate
+                uint64_t tagged_arg_ct = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t num_args = resolve_fixnum(tagged_arg_ct);
 
                 validate_num_args(closure, num_args);
 
@@ -1032,6 +1032,20 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 pc = pc_index;
                 break;
             }
+            case opcode_t::RESCUE:
+            {
+                DEBUG_MSG("RESCUE");
+                uint64_t narg_ptr = stk.pop_and_check_type(VT::FIXNUM);
+                int64_t num_args = resolve_fixnum(narg_ptr);
+
+                // Get the closure ptr from below the args
+                uint64_t closure_ptr = stk.snatch(num_args);
+
+                // Push the args and closure
+                stk.push(narg_ptr);
+                stk.push(closure_ptr);
+                break;
+            }
             case opcode_t::PUSH_UNSPEC:
             {
                 DEBUG_MSG("PUSH_UNSPEC");
@@ -1059,6 +1073,38 @@ std::unique_ptr<uint64_t> interpret(std::vector<uint8_t>& code) {
                 // Replace the value in the stack, and push unspec as result
                 stk.replace(idx, value);
                 stk.push(UNSPEC_VAL);
+                break;
+            }
+            case opcode_t::APPLY:
+            {
+                DEBUG_MSG("APPLY");
+                uint64_t args_ptr = stk.pop();
+                if (resolve_type(args_ptr) == VT::EMPTY_LIST) {
+                    stk.push(create_fixnum_ptr(0));
+                    break;
+                }
+                type_check_or_fail(args_ptr, VT::PAIR);
+
+                strip_tag(args_ptr);
+                uint64_t *addr = (uint64_t *)args_ptr;
+                uint64_t n_args = 0;
+                while (true) {
+                    // Push the car
+                    n_args++;
+                    stk.push(*addr);
+
+                    // Get the cdr
+                    addr += WORD_LEN;
+                    uint64_t cdr_ptr = *addr;
+                    if (resolve_type(cdr_ptr) == VT::EMPTY_LIST) {
+                        break;
+                    }
+                    type_check_or_fail(cdr_ptr, VT::PAIR);
+                    strip_tag(cdr_ptr);
+                    addr = (uint64_t *)cdr_ptr;
+                }
+
+                stk.push(create_fixnum_ptr(n_args));
                 break;
             }
             case opcode_t::FINISH:

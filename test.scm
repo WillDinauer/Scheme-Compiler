@@ -1,1 +1,9 @@
-(let ((f (lambda (a b . c) (vector a b c))))  (car (cdr (vector-ref (f 10 20 30 40) 2))))
+(let ((fact
+          (lambda (n)
+            (letrec ((fact-iter
+                      (lambda (n acc)
+                        (if (= n 0)
+                            acc
+                            (fact-iter (- n 1) (* acc n))))))
+              (fact-iter n 1)))))
+  (fact 6))
