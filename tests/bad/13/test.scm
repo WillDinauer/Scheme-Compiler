@@ -1,0 +1,1 @@
+(letrec* ((a (lambda (x) x))) (a))

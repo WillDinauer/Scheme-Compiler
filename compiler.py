@@ -164,8 +164,20 @@ def compiler_error(msg):
     raise SyntaxError(f"{LOG_TAG}: {msg}")
 
 def resolve_args_and_arity(args):
-    if len(args) >= 2 and args[len(args)-2] == ".":
-        args.pop(len(args)-2)
+    seen = set()
+    variadic = False
+    
+    # Check if variadic, or any duplicated bindings
+    for i, arg in enumerate(args):
+        if arg == "." and i == len(args) - 2:
+            variadic = True
+        if arg in seen:
+            compiler_error(f"duplicate variable names in lambda '{arg}'")
+        seen.add(arg)
+    
+    # Negative arity to indicate variadic
+    if variadic:
+        args.pop(len(args) - 2)
         return args, -len(args)
     return args, len(args)
 
@@ -227,17 +239,11 @@ class Compiler:
         return new_environment
     
     def create_letstar_environment(self, environment, binding_list) -> dict:
-        for item in environment:
-            print(item)
         # iterate through bindings
         for binding in binding_list:
             variable_name = binding[0]
 
             # Bindings take 1 argument (their value/expr)
-            print(f"compiling {binding[1]} in letstar")
-            print("env:")
-            for item in environment:
-                print(item)
             self.compile(binding[1], environment)
 
             # Shift by 1

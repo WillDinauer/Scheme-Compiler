@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: letrec currently only takes lambda bindings (got b -> 50)

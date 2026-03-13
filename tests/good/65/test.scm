@@ -1,0 +1,1 @@
+(let ((a (vector 1 2 3))) (vector-set! a 1 "hello") (vector-ref a 1))
