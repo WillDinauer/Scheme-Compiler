@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: quote takes a single argument

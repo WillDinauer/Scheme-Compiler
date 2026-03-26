@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: Bad let: Binding list is not a list - x

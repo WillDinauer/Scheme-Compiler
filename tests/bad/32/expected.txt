@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: 'define' in contex wehere definitions are not allowed. Expr: ['define', 'x', 1]

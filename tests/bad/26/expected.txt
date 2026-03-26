@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: Bad let: Trying to bind non-str variable '1'

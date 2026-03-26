@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: Non-str variable in lambda

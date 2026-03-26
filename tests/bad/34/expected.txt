@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: invalid lambda (empty body)

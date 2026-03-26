@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: set! not of form - (set! variable value)

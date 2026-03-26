@@ -1,0 +1,1 @@
+SyntaxError: [COMPILER]: uncaptured free variable while compiling lambda: y

@@ -164,6 +164,8 @@ def compiler_error(msg):
     raise SyntaxError(f"{LOG_TAG}: {msg}")
 
 def resolve_args_and_arity(args):
+    if not isinstance(args, list):
+        compiler_error("lambda arguments must be a list")
     seen = set()
     variadic = False
     
@@ -371,6 +373,8 @@ class Compiler:
         self.compile_list(char_arr, I.ALLOC_STR, environment)
 
     def compile_lambda_body(self, args, body, free_vars, lambda_name=None):
+        if not body:
+            compiler_error("invalid lambda (empty body)")
         # Jump with placeholder value
         self.code.append(I.JMP)
         self.code.append(box_fixnum(0))
@@ -676,7 +680,7 @@ class Compiler:
                         self.compile_function(expr[1:], environment, in_tail_pos, applied=True)
 
                     case _:
-                        compiler_error(f"Calling unbound/undefined '{func_name}' as a function.")
+                        compiler_error(f"Calling unbound/undefined parameter or variable as a function.")
                         
 
             case str():
@@ -915,7 +919,7 @@ def lift_lambdas(expr, bound: set, free: set):
                     # Bind lambda args
                     for variable in expr[1]:
                         if not isinstance(variable, str):
-                            compiler_error(f"Non-str variable in lambda: {variable}")
+                            compiler_error(f"Non-str variable in lambda")
                         local_bound.add(variable)
 
                     # Recurse
